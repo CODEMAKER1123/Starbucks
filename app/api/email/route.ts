@@ -3,13 +3,15 @@ import { sendEmail, isEmailConfigured } from '@/lib/email';
 import { downloadPhotoAsBase64 } from '@/lib/companycam';
 import { generateInvoicePDF } from '@/lib/pdf/invoice';
 import { generateWorkOrderPDF } from '@/lib/pdf/work-order';
+import { getJobById, updateJob } from '@/lib/db';
+import { EmailLog } from '@/lib/types';
 
 interface SendRequest {
   type: 'documents' | 'photos';
-  test?: boolean; // send to max.gelfman@rollingsuds.com instead of GoSuperClean
+  test?: boolean;
+  jobId?: string; // if provided, logs the send to the job
   storeNumber: string;
   woNumber: string;
-  // For documents email
   invoiceData?: {
     invoiceNumber: string;
     price: number;
@@ -30,8 +32,20 @@ interface SendRequest {
     startTime: string;
     stopTime: string;
   };
-  // For photos email
   photoUrls?: string[];
+}
+
+async function logEmailToJob(jobId: string | undefined, log: EmailLog) {
+  if (!jobId) return;
+  try {
+    const job = await getJobById(jobId);
+    if (!job) return;
+    const logs = job.emailLogs || [];
+    logs.push(log);
+    await updateJob(jobId, { emailLogs: logs } as Record<string, unknown>);
+  } catch (err) {
+    console.error('Failed to log email:', err);
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -47,10 +61,12 @@ export async function POST(req: NextRequest) {
     const testRecipient = 'max.gelfman@rollingsuds.com';
 
     if (body.type === 'documents') {
-      // Generate PDFs and send to documents@gosuperclean.com
       if (!body.invoiceData || !body.workOrderData) {
         return NextResponse.json({ error: 'invoiceData and workOrderData required' }, { status: 400 });
       }
+
+      const to = body.test ? testRecipient : 'documents@gosuperclean.com';
+      const subject = `${body.test ? '[TEST] ' : ''}Starbucks #${body.storeNumber} WO# ${body.woNumber} Invoice`;
 
       const invPdf = generateInvoicePDF({
         storeNumber: body.storeNumber,
@@ -67,8 +83,8 @@ export async function POST(req: NextRequest) {
       const woBase64 = Buffer.from(woPdf.output('arraybuffer')).toString('base64');
 
       await sendEmail({
-        to: body.test ? testRecipient : 'documents@gosuperclean.com',
-        subject: `${body.test ? '[TEST] ' : ''}Starbucks #${body.storeNumber} WO# ${body.woNumber} Invoice`,
+        to,
+        subject,
         body: `<p>Attached is the invoice and signed WO for Starbucks #${body.storeNumber} WO# ${body.woNumber}. Let me know if you have any questions. Thanks.</p>`,
         attachments: [
           {
@@ -84,13 +100,23 @@ export async function POST(req: NextRequest) {
         ],
       });
 
+      await logEmailToJob(body.jobId, {
+        type: 'documents',
+        to,
+        subject,
+        sentAt: new Date().toISOString(),
+        test: !!body.test,
+      });
+
       return NextResponse.json({ success: true, message: 'Documents email sent' });
 
     } else if (body.type === 'photos') {
-      // Download photos and send to starbucks@gosuperclean.com
       if (!body.photoUrls || body.photoUrls.length === 0) {
         return NextResponse.json({ error: 'photoUrls required' }, { status: 400 });
       }
+
+      const to = body.test ? testRecipient : 'starbucks@gosuperclean.com';
+      const subject = `${body.test ? '[TEST] ' : ''}Starbucks #${body.storeNumber} WO# ${body.woNumber} Pictures`;
 
       const attachments = [];
       for (let i = 0; i < body.photoUrls.length; i++) {
@@ -104,10 +130,18 @@ export async function POST(req: NextRequest) {
       }
 
       await sendEmail({
-        to: body.test ? testRecipient : 'starbucks@gosuperclean.com',
-        subject: `${body.test ? '[TEST] ' : ''}Starbucks #${body.storeNumber} WO# ${body.woNumber} Pictures`,
+        to,
+        subject,
         body: `<p>Attached are the before/after pictures and front door photo for Starbucks #${body.storeNumber} WO# ${body.woNumber}. Let me know if you have any questions. Thanks.</p>`,
         attachments,
+      });
+
+      await logEmailToJob(body.jobId, {
+        type: 'photos',
+        to,
+        subject,
+        sentAt: new Date().toISOString(),
+        test: !!body.test,
       });
 
       return NextResponse.json({ success: true, message: 'Photos email sent' });
@@ -121,9 +155,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/**
- * GET /api/email — check if email is configured
- */
 export async function GET() {
   return NextResponse.json({ configured: isEmailConfigured() });
 }

@@ -1,3 +1,11 @@
+export interface EmailLog {
+  type: 'documents' | 'photos';
+  to: string;
+  subject: string;
+  sentAt: string;
+  test: boolean;
+}
+
 export interface Job {
   id: string;
   workizJobId?: string;
@@ -16,6 +24,7 @@ export interface Job {
   status: 'scheduled' | 'in-progress' | 'completed';
   startTime?: string;
   stopTime?: string;
+  emailLogs?: EmailLog[];
   createdAt: string;
   updatedAt: string;
 }

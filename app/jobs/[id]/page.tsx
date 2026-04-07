@@ -41,6 +41,10 @@ export default function JobDetailPage() {
   const [sendingPhotos, setSendingPhotos] = useState(false);
   const [emailStatus, setEmailStatus] = useState('');
 
+  function refreshJob() {
+    fetch(`/api/jobs/${id}`).then((r) => r.json()).then(setJob).catch(() => {});
+  }
+
   useEffect(() => {
     fetch(`/api/jobs/${id}`)
       .then((r) => {
@@ -210,6 +214,7 @@ export default function JobDetailPage() {
         body: JSON.stringify({
           type: 'documents',
           test,
+          jobId: job.id,
           storeNumber: job.storeNumber,
           woNumber: job.woNumber || '',
           invoiceData: {
@@ -237,6 +242,7 @@ export default function JobDetailPage() {
       const data = await res.json();
       if (data.success) {
         setEmailStatus(test ? 'Test sent to max.gelfman@rollingsuds.com' : 'Documents sent to documents@gosuperclean.com');
+        refreshJob();
       } else {
         setEmailStatus(`Failed: ${data.error}`);
       }
@@ -258,6 +264,7 @@ export default function JobDetailPage() {
         body: JSON.stringify({
           type: 'photos',
           test,
+          jobId: job.id,
           storeNumber: job.storeNumber,
           woNumber: job.woNumber || '',
           photoUrls: Array.from(selectedPhotos),
@@ -266,6 +273,7 @@ export default function JobDetailPage() {
       const data = await res.json();
       if (data.success) {
         setEmailStatus(test ? 'Test sent to max.gelfman@rollingsuds.com' : 'Photos sent to starbucks@gosuperclean.com');
+        refreshJob();
       } else {
         setEmailStatus(`Failed: ${data.error}`);
       }
@@ -283,6 +291,9 @@ export default function JobDetailPage() {
       <button onClick={() => router.push('/schedule')} className="text-[#00A4C7] hover:underline">Back to Schedule</button>
     </div>
   );
+
+  const docsSent = job.emailLogs?.some((l) => l.type === 'documents' && !l.test);
+  const photosSent = job.emailLogs?.some((l) => l.type === 'photos' && !l.test);
 
   const statusColors: Record<string, string> = {
     scheduled: 'bg-blue-500',
@@ -481,7 +492,10 @@ export default function JobDetailPage() {
           <div className="p-4 bg-[#0a0f1a] rounded border border-[#1f2937]">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white text-sm font-medium">Invoice + Work Order</p>
+                <p className="text-white text-sm font-medium">
+                  Invoice + Work Order
+                  {docsSent && <span className="ml-2 text-green-400 text-xs font-normal">Sent</span>}
+                </p>
                 <p className="text-gray-500 text-xs">To: documents@gosuperclean.com</p>
                 <p className="text-gray-500 text-xs">Attachments: Invoice PDF, Signed Work Order PDF</p>
               </div>
@@ -498,7 +512,7 @@ export default function JobDetailPage() {
                   disabled={sendingDocs || !emailConfigured || !job.woNumber}
                   className="px-4 py-2 bg-[#00A4C7] text-white rounded text-sm font-medium hover:bg-[#0090b0] transition-colors disabled:opacity-50"
                 >
-                  {sendingDocs ? 'Sending...' : 'Send Documents'}
+                  {sendingDocs ? 'Sending...' : docsSent ? 'Resend Documents' : 'Send Documents'}
                 </button>
               </div>
             </div>
@@ -511,7 +525,10 @@ export default function JobDetailPage() {
           <div className="p-4 bg-[#0a0f1a] rounded border border-[#1f2937]">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white text-sm font-medium">Service Photos ({selectedPhotos.size} selected)</p>
+                <p className="text-white text-sm font-medium">
+                  Service Photos ({selectedPhotos.size} selected)
+                  {photosSent && <span className="ml-2 text-green-400 text-xs font-normal">Sent</span>}
+                </p>
                 <p className="text-gray-500 text-xs">To: starbucks@gosuperclean.com</p>
                 <p className="text-gray-500 text-xs">Attachments: {selectedPhotos.size} photo(s) from CompanyCam</p>
               </div>
@@ -528,7 +545,7 @@ export default function JobDetailPage() {
                   disabled={sendingPhotos || !emailConfigured || selectedPhotos.size === 0}
                   className="px-4 py-2 bg-[#00A4C7] text-white rounded text-sm font-medium hover:bg-[#0090b0] transition-colors disabled:opacity-50"
                 >
-                  {sendingPhotos ? 'Sending...' : 'Send Photos'}
+                  {sendingPhotos ? 'Sending...' : photosSent ? 'Resend Photos' : 'Send Photos'}
                 </button>
               </div>
             </div>
@@ -545,6 +562,33 @@ export default function JobDetailPage() {
               : 'bg-green-500/10 border border-green-500/30 text-green-400'
           }`}>
             {emailStatus}
+          </div>
+        )}
+
+        {/* Email send log */}
+        {job.emailLogs && job.emailLogs.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-[#1f2937]">
+            <h3 className="text-sm font-semibold text-white mb-2">Email Log</h3>
+            <div className="space-y-1">
+              {job.emailLogs.map((log, i) => (
+                <div key={i} className="flex items-center justify-between text-xs p-2 bg-[#0a0f1a] rounded">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-1.5 py-0.5 rounded font-medium ${
+                      log.type === 'documents' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'
+                    }`}>
+                      {log.type === 'documents' ? 'Docs' : 'Photos'}
+                    </span>
+                    {log.test && <span className="text-yellow-400">[TEST]</span>}
+                    <span className="text-gray-400">to {log.to}</span>
+                  </div>
+                  <span className="text-gray-500">
+                    {new Date(log.sentAt).toLocaleString('en-US', {
+                      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+                    })}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
