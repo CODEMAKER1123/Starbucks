@@ -76,7 +76,7 @@ export function buildMockPhotos(storeNumber: string, woNumber?: string): CCPhoto
         <rect x="35" y="35" width="1130" height="830" rx="24" fill="#111827" stroke="#00A4C7" stroke-width="8" />
         <text x="50%" y="38%" font-family="Arial, Helvetica, sans-serif" font-size="54" text-anchor="middle" fill="#e5e7eb">CompanyCam Mock Photo</text>
         <text x="50%" y="49%" font-family="Arial, Helvetica, sans-serif" font-size="42" text-anchor="middle" fill="#00A4C7">Starbucks #${storeNumber}</text>
-        <text x="50%" y="58%" font-family="Arial, Helvetica, sans-serif" font-size="34" text-anchor="middle" fill="#cbd5e1">${woNumber ? \`WO# \${woNumber}\` : 'No WO# entered yet'}</text>
+        <text x="50%" y="58%" font-family="Arial, Helvetica, sans-serif" font-size="34" text-anchor="middle" fill="#cbd5e1">${woNumber ? `WO# ${woNumber}` : 'No WO# entered yet'}</text>
         <text x="50%" y="69%" font-family="Arial, Helvetica, sans-serif" font-size="46" text-anchor="middle" fill="#f8fafc">${label}</text>
       </svg>`;
     const uri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
