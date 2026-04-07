@@ -1,9 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { TECHNICIANS, DEFAULT_PRICE } from '@/lib/constants';
 
+type Tab = 'input' | 'invoice' | 'work-order';
+
 export default function GeneratePage() {
+  const [tab, setTab] = useState<Tab>('input');
   const [form, setForm] = useState({
     storeNumber: '',
     woNumber: '',
@@ -11,126 +15,300 @@ export default function GeneratePage() {
     price: DEFAULT_PRICE.toString(),
     serviceDate: new Date().toISOString().split('T')[0],
     technician: '',
-    startTime: '21:00',
-    stopTime: '03:00',
+    startTime: '',
+    stopTime: '',
     address: '',
-    city: '',
-    state: '',
-    zip: '',
+    cityStateZip: '',
     storePhone: '',
   });
   const [generating, setGenerating] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   function update(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
+    setSaved(false);
   }
 
-  async function generatePDF(type: 'invoice' | 'work-order' | 'both') {
+  // Parse city, state, zip from combined field
+  function parseCityStateZip() {
+    const parts = form.cityStateZip.split(',').map((s) => s.trim());
+    const city = parts[0] || '';
+    const stateZip = (parts[1] || '').trim().split(/\s+/);
+    const state = stateZip[0] || '';
+    const zip = stateZip[1] || '';
+    return { city, state, zip };
+  }
+
+  // Generate preview when switching to invoice/work-order tabs
+  useEffect(() => {
+    if (tab === 'input') {
+      setPreviewUrl(null);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { city, state, zip } = parseCityStateZip();
+
+        if (tab === 'invoice') {
+          const { generateInvoicePDF } = await import('@/lib/pdf/invoice');
+          const doc = generateInvoicePDF({
+            storeNumber: form.storeNumber,
+            woNumber: form.woNumber,
+            invoiceNumber: form.invoiceNumber,
+            price: parseFloat(form.price) || DEFAULT_PRICE,
+            serviceDate: form.serviceDate,
+            address: form.address,
+            city, state, zip,
+          });
+          if (!cancelled) {
+            const blob = doc.output('blob');
+            setPreviewUrl(URL.createObjectURL(blob));
+          }
+        } else {
+          const { generateWorkOrderPDF } = await import('@/lib/pdf/work-order');
+          const doc = generateWorkOrderPDF({
+            storeNumber: form.storeNumber,
+            woNumber: form.woNumber,
+            address: form.address,
+            city, state, zip,
+            storePhone: form.storePhone,
+            serviceDate: form.serviceDate,
+            technician: form.technician,
+            startTime: form.startTime,
+            stopTime: form.stopTime,
+          });
+          if (!cancelled) {
+            const blob = doc.output('blob');
+            setPreviewUrl(URL.createObjectURL(blob));
+          }
+        }
+      } catch (err) {
+        console.error('Preview failed:', err);
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, form]);
+
+  async function generateAndDownload() {
     setGenerating(true);
     try {
+      const { city, state, zip } = parseCityStateZip();
       const { generateInvoicePDF } = await import('@/lib/pdf/invoice');
       const { generateWorkOrderPDF } = await import('@/lib/pdf/work-order');
 
-      const invoiceData = {
+      const inv = generateInvoicePDF({
         storeNumber: form.storeNumber,
         woNumber: form.woNumber,
         invoiceNumber: form.invoiceNumber,
         price: parseFloat(form.price) || DEFAULT_PRICE,
         serviceDate: form.serviceDate,
         address: form.address,
-        city: form.city,
-        state: form.state,
-        zip: form.zip,
-      };
+        city, state, zip,
+      });
+      inv.save(`Invoice_${form.storeNumber}_${form.invoiceNumber || 'draft'}.pdf`);
 
-      const woData = {
+      const wo = generateWorkOrderPDF({
         storeNumber: form.storeNumber,
         woNumber: form.woNumber,
         address: form.address,
-        city: form.city,
-        state: form.state,
-        zip: form.zip,
+        city, state, zip,
         storePhone: form.storePhone,
         serviceDate: form.serviceDate,
         technician: form.technician,
         startTime: form.startTime,
         stopTime: form.stopTime,
-      };
-
-      if (type === 'invoice' || type === 'both') {
-        const inv = generateInvoicePDF(invoiceData);
-        inv.save(`Invoice_${form.storeNumber}_${form.invoiceNumber || 'draft'}.pdf`);
-      }
-      if (type === 'work-order' || type === 'both') {
-        const wo = generateWorkOrderPDF(woData);
-        wo.save(`WO_${form.storeNumber}_${form.woNumber || 'draft'}.pdf`);
-      }
+      });
+      wo.save(`WO_${form.storeNumber}_${form.woNumber || 'draft'}.pdf`);
     } catch (err) {
       console.error('PDF generation failed:', err);
-      alert('Failed to generate PDF. Check console for details.');
     }
     setGenerating(false);
   }
 
+  async function addToSchedule() {
+    const { city, state, zip } = parseCityStateZip();
+    const job = {
+      id: uuidv4(),
+      storeNumber: form.storeNumber,
+      woNumber: form.woNumber || undefined,
+      invoiceNumber: form.invoiceNumber || undefined,
+      address: form.address,
+      city,
+      state,
+      zip,
+      storePhone: form.storePhone || undefined,
+      price: parseFloat(form.price) || DEFAULT_PRICE,
+      serviceDate: form.serviceDate,
+      assignedTech: form.technician || undefined,
+      startTime: form.startTime || undefined,
+      stopTime: form.stopTime || undefined,
+      status: 'scheduled' as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const res = await fetch('/api/jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(job),
+    });
+
+    if (res.ok) {
+      setSaved(true);
+    }
+  }
+
+  const tabs: { key: Tab; label: string }[] = [
+    { key: 'input', label: 'Input' },
+    { key: 'invoice', label: 'Invoice' },
+    { key: 'work-order', label: 'Work Order' },
+  ];
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Generate Documents</h1>
-        <p className="text-gray-400 text-sm mt-1">Create Invoice and Work Order PDFs</p>
+    <div className="space-y-0">
+      {/* Header with gradient */}
+      <div className="bg-gradient-to-r from-[#0a0f1a] via-[#0d2137] to-[#00A4C7]/40 rounded-t-lg p-5 flex items-center gap-4">
+        <div className="bg-white text-[#00A4C7] font-serif font-bold px-3 py-2 rounded-lg text-lg">RS</div>
+        <div>
+          <h1 className="text-xl font-bold text-white">Starbucks Job Doc Generator</h1>
+          <p className="text-[#00A4C7] text-sm">Invoice + Work Order &rarr; PDF</p>
+        </div>
       </div>
 
-      <div className="bg-[#111827] rounded-lg border border-[#1f2937] p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Field label="Store #" value={form.storeNumber} onChange={(v) => update('storeNumber', v)} placeholder="00806" />
-          <Field label="WO #" value={form.woNumber} onChange={(v) => update('woNumber', v)} placeholder="WO number" />
-          <Field label="Invoice #" value={form.invoiceNumber} onChange={(v) => update('invoiceNumber', v)} placeholder="INV-001" />
-          <Field label="Price ($)" value={form.price} onChange={(v) => update('price', v)} type="number" />
-          <Field label="Service Date" value={form.serviceDate} onChange={(v) => update('serviceDate', v)} type="date" />
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Technician</label>
-            <select
-              value={form.technician}
-              onChange={(e) => update('technician', e.target.value)}
-              className="w-full bg-[#0a0f1a] border border-[#374151] rounded px-3 py-2 text-sm text-gray-100 focus:border-[#00A4C7] focus:outline-none"
-            >
-              <option value="">Select technician...</option>
-              {TECHNICIANS.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
-          <Field label="Start Time" value={form.startTime} onChange={(v) => update('startTime', v)} type="time" />
-          <Field label="Stop Time" value={form.stopTime} onChange={(v) => update('stopTime', v)} type="time" />
-          <Field label="Address" value={form.address} onChange={(v) => update('address', v)} placeholder="301 Greenwich Ave" />
-          <Field label="City" value={form.city} onChange={(v) => update('city', v)} placeholder="Greenwich" />
-          <Field label="State" value={form.state} onChange={(v) => update('state', v)} placeholder="CT" />
-          <Field label="Zip" value={form.zip} onChange={(v) => update('zip', v)} placeholder="06830" />
-          <Field label="Store Phone" value={form.storePhone} onChange={(v) => update('storePhone', v)} placeholder="(203) 555-0100" />
-        </div>
+      {/* Tabs */}
+      <div className="bg-[#111827] border-b border-[#1f2937] flex">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`px-5 py-3 text-sm font-medium transition-colors ${
+              tab === t.key
+                ? 'text-[#00A4C7] border-b-2 border-[#00A4C7]'
+                : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-        <div className="flex flex-wrap gap-3 mt-6 pt-6 border-t border-[#1f2937]">
-          <button
-            onClick={() => generatePDF('invoice')}
-            disabled={generating}
-            className="px-5 py-2.5 bg-[#00A4C7] text-white rounded text-sm font-medium hover:bg-[#0090b0] transition-colors disabled:opacity-50"
-          >
-            {generating ? 'Generating...' : 'Download Invoice PDF'}
-          </button>
-          <button
-            onClick={() => generatePDF('work-order')}
-            disabled={generating}
-            className="px-5 py-2.5 bg-[#00A4C7] text-white rounded text-sm font-medium hover:bg-[#0090b0] transition-colors disabled:opacity-50"
-          >
-            {generating ? 'Generating...' : 'Download Work Order PDF'}
-          </button>
-          <button
-            onClick={() => generatePDF('both')}
-            disabled={generating}
-            className="px-5 py-2.5 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
-          >
-            {generating ? 'Generating...' : 'Download Both'}
-          </button>
-        </div>
+      {/* Content */}
+      <div className="bg-[#111827] rounded-b-lg border border-t-0 border-[#1f2937]">
+        {tab === 'input' ? (
+          <div className="p-6 space-y-5">
+            {/* Row 1: Store # and WO # */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="STORE #" value={form.storeNumber} onChange={(v) => update('storeNumber', v)} placeholder="00806" />
+              <Field label="WORK ORDER #" value={form.woNumber} onChange={(v) => update('woNumber', v)} placeholder="1963606" />
+            </div>
+
+            {/* Row 2: Invoice # and Price */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="INVOICE #" value={form.invoiceNumber} onChange={(v) => update('invoiceNumber', v)} placeholder="160" />
+              <Field label="PRICE ($)" value={form.price} onChange={(v) => update('price', v)} type="number" />
+            </div>
+
+            {/* Row 3: Service Date and Technician */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="SERVICE DATE" value={form.serviceDate} onChange={(v) => update('serviceDate', v)} type="date" />
+              <div>
+                <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">Technician</label>
+                <select
+                  value={form.technician}
+                  onChange={(e) => update('technician', e.target.value)}
+                  className="w-full bg-[#0a0f1a] border border-[#374151] rounded-lg px-4 py-3 text-sm text-gray-100 focus:border-[#00A4C7] focus:outline-none"
+                >
+                  <option value="">Select technician...</option>
+                  {TECHNICIANS.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Row 4: Start/Stop Time */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="START TIME" value={form.startTime} onChange={(v) => update('startTime', v)} type="time" />
+              <Field label="STOP TIME" value={form.stopTime} onChange={(v) => update('stopTime', v)} type="time" />
+            </div>
+
+            {/* Row 5: Address */}
+            <Field label="STORE ADDRESS" value={form.address} onChange={(v) => update('address', v)} placeholder="301 Greenwich Ave" />
+
+            {/* Row 6: City/State/Zip and Phone */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="CITY, STATE ZIP" value={form.cityStateZip} onChange={(v) => update('cityStateZip', v)} placeholder="Greenwich, CT 06830" />
+              <Field label="STORE PHONE" value={form.storePhone} onChange={(v) => update('storePhone', v)} placeholder="(203) 661-3042" />
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex flex-wrap gap-3 pt-4">
+              <button
+                onClick={generateAndDownload}
+                disabled={generating}
+                className="flex-1 min-w-[200px] px-5 py-3.5 bg-[#00A4C7] text-white rounded-lg text-sm font-semibold hover:bg-[#0090b0] transition-colors disabled:opacity-50"
+              >
+                {generating ? 'Generating...' : 'Generate Invoice & Work Order'}
+              </button>
+              <button
+                onClick={addToSchedule}
+                disabled={!form.storeNumber}
+                className={`px-5 py-3.5 rounded-lg text-sm font-semibold transition-colors ${
+                  saved
+                    ? 'bg-green-600 text-white'
+                    : 'bg-[#1f2937] text-gray-300 border border-[#374151] hover:border-[#00A4C7] hover:text-white disabled:opacity-50'
+                }`}
+              >
+                {saved ? 'Added to Schedule!' : '+ Add to Schedule'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* PDF Preview */
+          <div className="p-4">
+            {previewUrl ? (
+              <iframe
+                ref={iframeRef}
+                src={previewUrl}
+                className="w-full h-[75vh] rounded border border-[#1f2937]"
+                title={tab === 'invoice' ? 'Invoice Preview' : 'Work Order Preview'}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-[75vh] text-gray-500">
+                Loading preview...
+              </div>
+            )}
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={() => {
+                  if (previewUrl) {
+                    const a = document.createElement('a');
+                    a.href = previewUrl;
+                    a.download = tab === 'invoice'
+                      ? `Invoice_${form.storeNumber}_${form.invoiceNumber || 'draft'}.pdf`
+                      : `WO_${form.storeNumber}_${form.woNumber || 'draft'}.pdf`;
+                    a.click();
+                  }
+                }}
+                className="px-5 py-2.5 bg-[#00A4C7] text-white rounded-lg text-sm font-medium hover:bg-[#0090b0] transition-colors"
+              >
+                Download {tab === 'invoice' ? 'Invoice' : 'Work Order'} PDF
+              </button>
+              <button
+                onClick={() => setTab('input')}
+                className="px-5 py-2.5 bg-[#1f2937] text-gray-300 rounded-lg text-sm font-medium border border-[#374151] hover:border-[#00A4C7] transition-colors"
+              >
+                Back to Input
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -151,13 +329,13 @@ function Field({
 }) {
   return (
     <div>
-      <label className="block text-sm text-gray-400 mb-1">{label}</label>
+      <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">{label}</label>
       <input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full bg-[#0a0f1a] border border-[#374151] rounded px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:border-[#00A4C7] focus:outline-none"
+        className="w-full bg-[#0a0f1a] border border-[#374151] rounded-lg px-4 py-3 text-sm text-gray-100 placeholder-gray-600 focus:border-[#00A4C7] focus:outline-none"
       />
     </div>
   );
