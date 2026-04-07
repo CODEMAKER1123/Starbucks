@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { TECHNICIANS, DEFAULT_PRICE } from '@/lib/constants';
+import { DEFAULT_PRICE } from '@/lib/constants';
+import { useTechnicians } from '@/lib/use-technicians';
 
 type Tab = 'input' | 'invoice' | 'work-order';
 
 export default function GeneratePage() {
+  const technicians = useTechnicians();
   const [tab, setTab] = useState<Tab>('input');
   const [form, setForm] = useState({
     storeNumber: '',
@@ -225,7 +227,7 @@ export default function GeneratePage() {
                   className="w-full bg-[#0a0f1a] border border-[#374151] rounded-lg px-4 py-3 text-sm text-gray-100 focus:border-[#00A4C7] focus:outline-none"
                 >
                   <option value="">Select technician...</option>
-                  {TECHNICIANS.map((t) => (
+                  {technicians.map((t) => (
                     <option key={t} value={t}>{t}</option>
                   ))}
                 </select>

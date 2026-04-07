@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Job } from '@/lib/types';
-import { TECHNICIANS, DEFAULT_PRICE } from '@/lib/constants';
+import { DEFAULT_PRICE } from '@/lib/constants';
+import { useTechnicians } from '@/lib/use-technicians';
 
 interface CCProject {
   id: string;
@@ -19,6 +20,7 @@ interface CCPhoto {
 }
 
 export default function JobDetailPage() {
+  const technicians = useTechnicians();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [job, setJob] = useState<Job | null>(null);
@@ -329,7 +331,7 @@ export default function JobDetailPage() {
               className="w-full bg-[#0a0f1a] border border-[#374151] rounded px-3 py-2 text-sm text-gray-100"
             >
               <option value="">Unassigned</option>
-              {TECHNICIANS.map((t) => <option key={t} value={t}>{t}</option>)}
+              {technicians.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
           <EditField label="Price" value={String(job.price || DEFAULT_PRICE)} type="number" onSave={(v) => updateField('price', Number(v))} />

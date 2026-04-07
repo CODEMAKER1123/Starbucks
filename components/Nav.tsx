@@ -8,6 +8,7 @@ const links = [
   { href: '/schedule', label: 'Schedule' },
   { href: '/upload', label: 'Upload' },
   { href: '/generate', label: 'Generate Docs' },
+  { href: '/settings', label: 'Settings' },
 ];
 
 export default function Nav() {

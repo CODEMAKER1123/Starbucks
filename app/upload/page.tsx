@@ -2,10 +2,12 @@
 
 import { useState, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { TECHNICIANS, DEFAULT_PRICE } from '@/lib/constants';
+import { DEFAULT_PRICE } from '@/lib/constants';
+import { useTechnicians } from '@/lib/use-technicians';
 import { Job, ParsedScheduleRow } from '@/lib/types';
 
 export default function UploadPage() {
+  const technicians = useTechnicians();
   const [rows, setRows] = useState<ParsedScheduleRow[]>([]);
   const [prices, setPrices] = useState<Record<number, number>>({});
   const [techs, setTechs] = useState<Record<number, string>>({});
@@ -151,9 +153,41 @@ export default function UploadPage() {
       {/* Preview */}
       {rows.length > 0 && (
         <div className="bg-[#111827] rounded-lg border border-[#1f2937] p-5 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold text-white">{rows.length} Jobs Parsed</h2>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-400">All Prices:</label>
+                <input
+                  type="number"
+                  placeholder="350"
+                  className="w-20 bg-[#0a0f1a] border border-[#374151] rounded px-2 py-1 text-sm text-gray-100"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const val = Number((e.target as HTMLInputElement).value);
+                      if (val > 0) {
+                        const newPrices: Record<number, number> = {};
+                        rows.forEach((_, i) => { newPrices[i] = val; });
+                        setPrices(newPrices);
+                      }
+                    }
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    const input = document.querySelector<HTMLInputElement>('input[placeholder="350"]');
+                    const val = Number(input?.value);
+                    if (val > 0) {
+                      const newPrices: Record<number, number> = {};
+                      rows.forEach((_, i) => { newPrices[i] = val; });
+                      setPrices(newPrices);
+                    }
+                  }}
+                  className="px-2 py-1 bg-[#374151] text-gray-300 rounded text-xs hover:bg-[#4b5563] transition-colors"
+                >
+                  Set All
+                </button>
+              </div>
               <label className="text-sm text-gray-400">Default Tech:</label>
               <select
                 value={defaultTech}
@@ -161,7 +195,7 @@ export default function UploadPage() {
                 className="bg-[#0a0f1a] border border-[#374151] rounded px-2 py-1 text-sm text-gray-100"
               >
                 <option value="">None</option>
-                {TECHNICIANS.map((t) => (
+                {technicians.map((t) => (
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
@@ -204,7 +238,7 @@ export default function UploadPage() {
                         className="bg-[#0a0f1a] border border-[#374151] rounded px-2 py-1 text-sm text-gray-100"
                       >
                         <option value="">Unassigned</option>
-                        {TECHNICIANS.map((t) => (
+                        {technicians.map((t) => (
                           <option key={t} value={t}>{t}</option>
                         ))}
                       </select>

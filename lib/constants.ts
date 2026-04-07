@@ -1,4 +1,5 @@
-export const TECHNICIANS = [
+export const DEFAULT_TECHNICIANS = [
+  'Max Gelfman',
   'Alexander Cardone',
   'Alejandro Claudio',
   'Jovens Toussaint',

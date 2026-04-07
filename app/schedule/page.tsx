@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Job } from '@/lib/types';
-import { TECHNICIANS } from '@/lib/constants';
+import { useTechnicians } from '@/lib/use-technicians';
 
 type ViewMode = 'week' | 'month';
 
 export default function SchedulePage() {
+  const technicians = useTechnicians();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [view, setView] = useState<ViewMode>('week');
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -86,7 +87,7 @@ export default function SchedulePage() {
             className="bg-[#0a0f1a] border border-[#374151] rounded px-2 py-1 text-sm text-gray-100"
           >
             <option value="">Assign tech...</option>
-            {TECHNICIANS.map((t) => <option key={t} value={t}>{t}</option>)}
+            {technicians.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
           <button onClick={bulkAssign} disabled={!bulkTech} className="px-3 py-1 bg-[#00A4C7] text-white rounded text-sm disabled:opacity-50">Assign</button>
           <button onClick={() => setSelectedJobs(new Set())} className="px-3 py-1 text-gray-400 hover:text-white text-sm">Clear</button>
