@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body: SendRequest = await req.json();
-    const testRecipient = 'max.gelfman@rollingsuds.com';
+    const testRecipient = process.env.EMAIL_REPLY_TO || process.env.EMAIL_FROM || '';
 
     if (body.type === 'documents') {
       if (!body.invoiceData || !body.workOrderData) {

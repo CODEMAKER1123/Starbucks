@@ -241,7 +241,7 @@ export default function JobDetailPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setEmailStatus(test ? 'Test sent to max.gelfman@rollingsuds.com' : 'Documents sent to documents@gosuperclean.com');
+        setEmailStatus(test ? 'Test sent to your email' :'Documents sent to documents@gosuperclean.com');
         refreshJob();
       } else {
         setEmailStatus(`Failed: ${data.error}`);
@@ -272,7 +272,7 @@ export default function JobDetailPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setEmailStatus(test ? 'Test sent to max.gelfman@rollingsuds.com' : 'Photos sent to starbucks@gosuperclean.com');
+        setEmailStatus(test ? 'Test sent to your email' :'Photos sent to starbucks@gosuperclean.com');
         refreshJob();
       } else {
         setEmailStatus(`Failed: ${data.error}`);

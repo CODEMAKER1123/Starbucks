@@ -65,37 +65,11 @@ This creates your own copy. Your data is completely separate — nothing connect
 
 ### Step 2: Customize for Your Franchise
 
-Edit these files in your fork:
+1. Copy `.env.example` to `.env.local`
+2. Fill in ALL the values with your own info (API keys, company name, email, phone)
+3. That's it — everything reads from environment variables. No code changes needed.
 
-**`lib/constants.ts`** — Change the company info:
-```typescript
-export const COMPANY = {
-  name: 'Rolling Suds of [YOUR TERRITORY]',
-  phone: '(YOUR) NUMBER',
-  email: 'your.email@rollingsuds.com',
-};
-```
-
-**`lib/constants.ts`** — Change the default technicians:
-```typescript
-export const DEFAULT_TECHNICIANS = [
-  'Your Name',
-  'Your Tech 1',
-  'Your Tech 2',
-];
-```
-
-**`lib/constants.ts`** — Change the seed data to your stores (or just delete it and upload your own spreadsheet)
-
-**`lib/email.ts`** — Change the reply-to and CC email to yours:
-```typescript
-replyTo: 'your.email@rollingsuds.com',
-cc: ['your.email@rollingsuds.com'],
-```
-
-**`lib/pdf/invoice.ts`** — The invoice already uses the COMPANY constant, so it'll auto-update
-
-**`lib/pdf/work-order.ts`** — The work order technician default will use your name from the constants
+**Optional:** Edit `lib/constants.ts` to change the default technicians list, or just manage them from the Settings page in the app after deploying.
 
 ### Step 3: Get Your API Keys
 
@@ -126,7 +100,13 @@ cc: ['your.email@rollingsuds.com'],
 |------|-------|
 | `COMPANYCAM_API_TOKEN` | Your CompanyCam token |
 | `RESEND_API_KEY` | Your Resend API key |
-| `EMAIL_FROM` | your-name@yourdomain.com |
+| `EMAIL_FROM` | yourname@yourdomain.com |
+| `EMAIL_SENDER_NAME` | Your Name |
+| `EMAIL_REPLY_TO` | your.email@rollingsuds.com |
+| `EMAIL_CC` | your.email@rollingsuds.com |
+| `NEXT_PUBLIC_COMPANY_NAME` | Rolling Suds of [Your Territory] |
+| `NEXT_PUBLIC_COMPANY_PHONE` | (555) 000-0000 |
+| `NEXT_PUBLIC_COMPANY_EMAIL` | your.email@rollingsuds.com |
 | `WORKIZ_API_TOKEN` | Your Workiz token (optional) |
 | `WORKIZ_BASE_URL` | https://api.workiz.com/api/v1 |
 

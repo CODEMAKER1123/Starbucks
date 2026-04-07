@@ -1,7 +1,10 @@
 import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const EMAIL_FROM = process.env.EMAIL_FROM || 'max@rollingsudsnyct.net';
+const EMAIL_FROM = process.env.EMAIL_FROM || 'change-me@example.com';
+const EMAIL_SENDER_NAME = process.env.EMAIL_SENDER_NAME || 'Rolling Suds';
+const EMAIL_REPLY_TO = process.env.EMAIL_REPLY_TO || process.env.EMAIL_FROM || '';
+const EMAIL_CC = process.env.EMAIL_CC || process.env.EMAIL_REPLY_TO || '';
 
 interface Attachment {
   name: string;
@@ -21,10 +24,10 @@ interface EmailOptions {
  */
 export async function sendEmail(options: EmailOptions): Promise<void> {
   const { error } = await resend.emails.send({
-    from: `Max Gelfman <${EMAIL_FROM}>`,
-    replyTo: 'max.gelfman@rollingsuds.com',
+    from: `${EMAIL_SENDER_NAME} <${EMAIL_FROM}>`,
+    replyTo: EMAIL_REPLY_TO || undefined,
     to: [options.to],
-    cc: ['max.gelfman@rollingsuds.com'],
+    cc: EMAIL_CC ? [EMAIL_CC] : undefined,
     subject: options.subject,
     html: options.body,
     attachments: options.attachments.map((att) => ({

@@ -8,9 +8,9 @@ export const DEFAULT_TECHNICIANS = [
 export const DEFAULT_PRICE = 350;
 
 export const COMPANY = {
-  name: 'Rolling Suds of Westchester-Stamford',
-  phone: '(914) 588-4140',
-  email: 'max.gelfman@rollingsuds.com',
+  name: process.env.NEXT_PUBLIC_COMPANY_NAME || 'Rolling Suds',
+  phone: process.env.NEXT_PUBLIC_COMPANY_PHONE || '(555) 000-0000',
+  email: process.env.NEXT_PUBLIC_COMPANY_EMAIL || 'change-me@example.com',
   brand: 'Rolling Suds',
   tagline: 'THE POWER WASHING PROFESSIONALS',
 };
