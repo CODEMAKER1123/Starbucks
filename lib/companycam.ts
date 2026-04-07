@@ -1,11 +1,15 @@
-const COMPANYCAM_TOKEN = process.env.COMPANYCAM_API_TOKEN || '';
+const TOKENS = [
+  process.env.COMPANYCAM_API_TOKEN_BALTIMORE,
+  process.env.COMPANYCAM_API_TOKEN_LANCASTER
+].filter(Boolean) as string[];
+
 const BASE_URL = 'https://api.companycam.com/v2';
 const COMPANYCAM_MODE = (process.env.COMPANYCAM_MODE || '').toLowerCase();
 
-async function ccFetch(endpoint: string) {
+async function ccFetch(endpoint: string, token: string) {
   const res = await fetch(`${BASE_URL}${endpoint}`, {
     headers: {
-      Authorization: `Bearer ${COMPANYCAM_TOKEN}`,
+      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
   });
@@ -43,7 +47,7 @@ export interface CCPhoto {
 
 export function isCompanyCamConfigured(): boolean {
   if (COMPANYCAM_MODE === 'mock') return false;
-  return !!COMPANYCAM_TOKEN;
+  return TOKENS.length > 0;
 }
 
 export function buildMockProject(storeNumber: string, woNumber?: string): CCProject {
@@ -72,7 +76,7 @@ export function buildMockPhotos(storeNumber: string, woNumber?: string): CCPhoto
         <rect x="35" y="35" width="1130" height="830" rx="24" fill="#111827" stroke="#00A4C7" stroke-width="8" />
         <text x="50%" y="38%" font-family="Arial, Helvetica, sans-serif" font-size="54" text-anchor="middle" fill="#e5e7eb">CompanyCam Mock Photo</text>
         <text x="50%" y="49%" font-family="Arial, Helvetica, sans-serif" font-size="42" text-anchor="middle" fill="#00A4C7">Starbucks #${storeNumber}</text>
-        <text x="50%" y="58%" font-family="Arial, Helvetica, sans-serif" font-size="34" text-anchor="middle" fill="#cbd5e1">${woNumber ? `WO# ${woNumber}` : 'No WO# entered yet'}</text>
+        <text x="50%" y="58%" font-family="Arial, Helvetica, sans-serif" font-size="34" text-anchor="middle" fill="#cbd5e1">${woNumber ? \`WO# \${woNumber}\` : 'No WO# entered yet'}</text>
         <text x="50%" y="69%" font-family="Arial, Helvetica, sans-serif" font-size="46" text-anchor="middle" fill="#f8fafc">${label}</text>
       </svg>`;
     const uri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -92,11 +96,22 @@ export function buildMockPhotos(storeNumber: string, woNumber?: string): CCPhoto
 }
 
 /**
- * Search CompanyCam projects by query string
+ * Search CompanyCam projects by query string across all configured accounts
  */
 export async function searchProjects(query: string): Promise<CCProject[]> {
   const encoded = encodeURIComponent(query);
-  return ccFetch(`/projects?query=${encoded}&per_page=25`);
+  const allResults: CCProject[] = [];
+  
+  for (const token of TOKENS) {
+    try {
+      const res = await ccFetch(`/projects?query=${encoded}&per_page=25`, token);
+      allResults.push(...res);
+    } catch (err) {
+      console.error('Error fetching projects from a CompanyCam account:', err);
+    }
+  }
+  
+  return allResults;
 }
 
 export async function findStarbucksProject(
@@ -126,7 +141,19 @@ export async function findStarbucksProject(
 }
 
 export async function getProjectPhotos(projectId: string, perPage = 50): Promise<CCPhoto[]> {
-  return ccFetch(`/projects/${projectId}/photos?per_page=${perPage}`);
+  let lastError = null;
+  
+  // Try all tokens until one works, since we don't know which account owns this project ID
+  for (const token of TOKENS) {
+    try {
+      return await ccFetch(`/projects/${projectId}/photos?per_page=${perPage}`, token);
+    } catch (err) {
+      lastError = err;
+      continue;
+    }
+  }
+  
+  throw new Error(`Failed to fetch photos. Project ${projectId} may not exist in any configured CompanyCam account. (${lastError})`);
 }
 
 export async function downloadPhotoAsBase64(photoUrl: string): Promise<{ base64: string; contentType: string }> {
