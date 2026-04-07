@@ -1,3 +1,5 @@
+'use client';
+
 export default function GuidePage() {
   return (
     <div className="min-h-screen bg-white text-gray-800 print:bg-white">
@@ -57,7 +59,7 @@ export default function GuidePage() {
         <h3>2. Calendar / Schedule View</h3>
         <ul>
           <li>See all your Starbucks jobs in a week or month calendar view</li>
-          <li>Color coded: <strong style={{color:'#ef4444'}}>red</strong> = unassigned, <strong style={{color:'#3b82f6'}}>blue</strong> = assigned, <strong style={{color:'#22c55e'}}>green</strong> = completed</li>
+          <li>Color coded: <strong className="text-red-500">red</strong> = unassigned, <strong className="text-blue-500">blue</strong> = assigned, <strong className="text-green-500">green</strong> = completed</li>
           <li>Click any job to open its detail page</li>
           <li>Bulk assign a technician to multiple jobs at once (Shift+Click to select)</li>
         </ul>
@@ -268,7 +270,7 @@ export default function GuidePage() {
         </ul>
 
         <hr />
-        <p style={{textAlign: 'center', color: '#999', fontSize: 12, marginTop: 32}}>
+        <p className="text-center text-gray-400 text-xs mt-8">
           Questions? Reach out to Max Gelfman at Rolling Suds of Westchester-Stamford.
         </p>
       </div>
