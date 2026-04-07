@@ -4,7 +4,7 @@ import { SEED_JOBS, DEFAULT_PRICE } from '@/lib/constants';
 import { Job } from '@/lib/types';
 import { setAllJobs } from '@/lib/db';
 
-export async function POST() {
+async function seedJobs() {
   const now = new Date().toISOString();
   const jobs: Job[] = SEED_JOBS.map((s) => ({
     id: uuidv4(),
@@ -22,4 +22,12 @@ export async function POST() {
 
   await setAllJobs(jobs);
   return NextResponse.json({ success: true, count: jobs.length });
+}
+
+export async function GET() {
+  return seedJobs();
+}
+
+export async function POST() {
+  return seedJobs();
 }

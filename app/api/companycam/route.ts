@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { searchProjects, findStarbucksProject, getProjectPhotos } from '@/lib/companycam';
+import {
+  searchProjects,
+  findStarbucksProject,
+  getProjectPhotos,
+  isCompanyCamConfigured,
+  buildMockPhotos,
+  buildMockProject,
+} from '@/lib/companycam';
 
 /**
  * GET /api/companycam?storeNumber=00806&woNumber=1963606 — find exact project + photos
@@ -13,22 +20,59 @@ export async function GET(req: NextRequest) {
     const query = req.nextUrl.searchParams.get('query');
     const projectId = req.nextUrl.searchParams.get('projectId');
 
-    // Direct photo fetch by project ID
-    if (projectId) {
-      const photos = await getProjectPhotos(projectId);
-      return NextResponse.json({ success: true, photos });
+    const configured = isCompanyCamConfigured();
+
+    if (!configured) {
+      if (projectId?.startsWith('mock:')) {
+        const [, mockStoreNumber = '00000', mockWoNumber = 'pending'] = projectId.split(':');
+        return NextResponse.json({
+          success: true,
+          configured: false,
+          mode: 'mock',
+          photos: buildMockPhotos(mockStoreNumber, mockWoNumber === 'pending' ? undefined : mockWoNumber),
+          message: 'CompanyCam is not configured. Showing mock placeholder photos.',
+        });
+      }
+
+      if (storeNumber) {
+        const mockProject = buildMockProject(storeNumber, woNumber || undefined);
+        return NextResponse.json({
+          success: true,
+          configured: false,
+          mode: 'mock',
+          matched: false,
+          project: null,
+          photos: [],
+          searchResults: [mockProject],
+          message: 'CompanyCam is not configured. Select the mock project to preview placeholder photos or set COMPANYCAM_API_TOKEN for live matching.',
+        });
+      }
+
+      if (query) {
+        return NextResponse.json({
+          success: true,
+          configured: false,
+          mode: 'mock',
+          projects: [buildMockProject(query.replace(/\D/g, '').padStart(5, '0').slice(-5) || '00000')],
+          message: 'CompanyCam is not configured. Returning mock results only.',
+        });
+      }
     }
 
-    // Smart Starbucks project finder — uses exact naming convention
-    // "Starbucks #00806 WO# 1963606"
+    if (projectId) {
+      const photos = await getProjectPhotos(projectId);
+      return NextResponse.json({ success: true, configured: true, mode: 'live', photos });
+    }
+
     if (storeNumber) {
       const project = await findStarbucksProject(storeNumber, woNumber || undefined);
 
       if (!project) {
-        // Return all search results so user can pick manually
         const fallbackResults = await searchProjects(`Starbucks #${storeNumber}`);
         return NextResponse.json({
           success: true,
+          configured: true,
+          mode: 'live',
           matched: false,
           project: null,
           photos: [],
@@ -37,10 +81,11 @@ export async function GET(req: NextRequest) {
         });
       }
 
-      // Found exact match — auto-load photos
       const photos = await getProjectPhotos(project.id);
       return NextResponse.json({
         success: true,
+        configured: true,
+        mode: 'live',
         matched: true,
         project: { id: project.id, name: project.name },
         photos,
@@ -48,10 +93,9 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Generic search fallback
     if (query) {
       const projects = await searchProjects(query);
-      return NextResponse.json({ success: true, projects });
+      return NextResponse.json({ success: true, configured: true, mode: 'live', projects });
     }
 
     return NextResponse.json(

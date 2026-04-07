@@ -1,36 +1,103 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Rolling Suds — Starbucks Operations Platform
 
-## Getting Started
+Local-first Next.js app for managing Starbucks overnight pressure washing jobs.
 
-First, run the development server:
+## What works locally
+
+With no external credentials, the app now runs in **mock/local mode**:
+- Spreadsheet upload + XLS/XLSX parsing
+- Local job storage in `data/jobs.json`
+- Technician settings in `data/technicians.json`
+- Calendar/schedule view
+- Job detail editing with autosave
+- Invoice + work order PDF generation
+- `/generate` standalone fallback doc generator
+- Mock CompanyCam photo matching placeholders
+- Mock email sending that writes payloads to `data/mock-emails/*.json`
+- Mock Workiz push endpoint for upload flow testing
+
+With real env vars, it will use live integrations for:
+- Resend email
+- CompanyCam project/photo lookup
+- Workiz job creation
+- Redis storage (if `REDIS_URL` is provided)
+
+## Quick start
 
 ```bash
+npm ci
+cp .env.example .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Recommended local env
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The checked-in `.env.example` defaults to mock mode. For local development, keep:
 
-## Learn More
+```bash
+EMAIL_DELIVERY_MODE=mock
+COMPANYCAM_MODE=mock
+WORKIZ_MODE=mock
+```
 
-To learn more about Next.js, take a look at the following resources:
+Then set your branding:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+NEXT_PUBLIC_COMPANY_NAME=Rolling Suds of Your Territory
+NEXT_PUBLIC_COMPANY_PHONE=(555) 000-0000
+NEXT_PUBLIC_COMPANY_EMAIL=you@example.com
+EMAIL_REPLY_TO=you@example.com
+EMAIL_CC=you@example.com
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Live integrations
 
-## Deploy on Vercel
+To switch any service from mock to live:
+- remove the corresponding `*_MODE=mock` override
+- add the real API credential(s)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Email / Resend
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Required for live sends:
+- `RESEND_API_KEY`
+- `EMAIL_FROM`
+- `EMAIL_SENDER_NAME`
+- `EMAIL_REPLY_TO`
+- `EMAIL_CC`
+
+### CompanyCam
+
+Required for live photo search:
+- `COMPANYCAM_API_TOKEN`
+
+### Workiz
+
+Optional live upload target:
+- `WORKIZ_API_TOKEN`
+- `WORKIZ_BASE_URL`
+
+### Redis storage
+
+Optional persistent hosted storage:
+- `REDIS_URL`
+
+Without `REDIS_URL`, the app stores data in the local `data/` folder.
+
+## Helpful routes
+
+- `/` — dashboard
+- `/upload` — spreadsheet upload
+- `/schedule` — calendar / schedule view
+- `/generate` — standalone doc generator fallback
+- `/settings` — technician management
+- `/guide` — franchise guide
+- `/api/seed` — seed demo jobs (GET or POST)
+
+## Notes
+
+- Job detail API now exists at `/api/jobs/[id]`
+- Upload page Workiz push uses `/api/workiz/jobs`
+- In mock email mode, no email is sent externally; payloads are written to `data/mock-emails/`
+- In mock CompanyCam mode, selecting the mock project loads five placeholder images so the send-photos flow can still be tested end-to-end

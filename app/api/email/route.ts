@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendEmail, isEmailConfigured } from '@/lib/email';
+import { sendEmail, getEmailStatus } from '@/lib/email';
 import { downloadPhotoAsBase64 } from '@/lib/companycam';
 import { generateInvoicePDF } from '@/lib/pdf/invoice';
 import { generateWorkOrderPDF } from '@/lib/pdf/work-order';
@@ -9,7 +9,7 @@ import { EmailLog } from '@/lib/types';
 interface SendRequest {
   type: 'documents' | 'photos';
   test?: boolean;
-  jobId?: string; // if provided, logs the send to the job
+  jobId?: string;
   storeNumber: string;
   woNumber: string;
   invoiceData?: {
@@ -50,15 +50,16 @@ async function logEmailToJob(jobId: string | undefined, log: EmailLog) {
 
 export async function POST(req: NextRequest) {
   try {
-    if (!isEmailConfigured()) {
+    const emailStatus = getEmailStatus();
+    if (!emailStatus.configured) {
       return NextResponse.json(
-        { success: false, error: 'Email not configured. Set RESEND_API_KEY in .env.local' },
+        { success: false, error: 'Email is unavailable. Set RESEND_API_KEY or EMAIL_DELIVERY_MODE=mock in .env.local.' },
         { status: 500 }
       );
     }
 
     const body: SendRequest = await req.json();
-    const testRecipient = process.env.EMAIL_REPLY_TO || 'max.gelfman@rollingsuds.com';
+    const testRecipient = process.env.EMAIL_REPLY_TO || process.env.NEXT_PUBLIC_COMPANY_EMAIL || 'operator@example.local';
 
     if (body.type === 'documents') {
       if (!body.invoiceData || !body.workOrderData) {
@@ -82,7 +83,7 @@ export async function POST(req: NextRequest) {
       });
       const woBase64 = Buffer.from(woPdf.output('arraybuffer')).toString('base64');
 
-      await sendEmail({
+      const result = await sendEmail({
         to,
         subject,
         body: `<p>Attached is the invoice and signed WO for Starbucks #${body.storeNumber} WO# ${body.woNumber}. Let me know if you have any questions. Thanks.</p>`,
@@ -108,9 +109,16 @@ export async function POST(req: NextRequest) {
         test: !!body.test,
       });
 
-      return NextResponse.json({ success: true, message: 'Documents email sent' });
+      return NextResponse.json({
+        success: true,
+        mode: result.mode,
+        message: result.mode === 'mock'
+          ? 'Documents email captured locally in data/mock-emails'
+          : 'Documents email sent',
+      });
+    }
 
-    } else if (body.type === 'photos') {
+    if (body.type === 'photos') {
       if (!body.photoUrls || body.photoUrls.length === 0) {
         return NextResponse.json({ error: 'photoUrls required' }, { status: 400 });
       }
@@ -121,7 +129,7 @@ export async function POST(req: NextRequest) {
       const attachments = [];
       for (let i = 0; i < body.photoUrls.length; i++) {
         const { base64, contentType } = await downloadPhotoAsBase64(body.photoUrls[i]);
-        const ext = contentType.includes('png') ? 'png' : 'jpg';
+        const ext = contentType.includes('png') ? 'png' : contentType.includes('svg') ? 'svg' : 'jpg';
         attachments.push({
           name: `SB${body.storeNumber}_photo_${i + 1}.${ext}`,
           contentType,
@@ -129,7 +137,7 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      await sendEmail({
+      const result = await sendEmail({
         to,
         subject,
         body: `<p>Attached are the before/after pictures and front door photo for Starbucks #${body.storeNumber} WO# ${body.woNumber}. Let me know if you have any questions. Thanks.</p>`,
@@ -144,11 +152,16 @@ export async function POST(req: NextRequest) {
         test: !!body.test,
       });
 
-      return NextResponse.json({ success: true, message: 'Photos email sent' });
-
-    } else {
-      return NextResponse.json({ error: 'type must be "documents" or "photos"' }, { status: 400 });
+      return NextResponse.json({
+        success: true,
+        mode: result.mode,
+        message: result.mode === 'mock'
+          ? 'Photos email captured locally in data/mock-emails'
+          : 'Photos email sent',
+      });
     }
+
+    return NextResponse.json({ error: 'type must be "documents" or "photos"' }, { status: 400 });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ success: false, error: message }, { status: 500 });
@@ -156,5 +169,5 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  return NextResponse.json({ configured: isEmailConfigured() });
+  return NextResponse.json(getEmailStatus());
 }
