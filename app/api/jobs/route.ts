@@ -26,23 +26,38 @@ function writeJobs(jobs: Job[]) {
 }
 
 export async function GET() {
-  return NextResponse.json(readJobs());
+  try {
+    return NextResponse.json(readJobs());
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const jobs = readJobs();
-  if (Array.isArray(body)) {
-    jobs.push(...body);
-  } else {
-    jobs.push(body);
+  try {
+    const body = await req.json();
+    const jobs = readJobs();
+    if (Array.isArray(body)) {
+      jobs.push(...body);
+    } else {
+      jobs.push(body);
+    }
+    writeJobs(jobs);
+    return NextResponse.json({ success: true, count: Array.isArray(body) ? body.length : 1 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-  writeJobs(jobs);
-  return NextResponse.json({ success: true, count: Array.isArray(body) ? body.length : 1 });
 }
 
 export async function PUT(req: NextRequest) {
-  const jobs: Job[] = await req.json();
-  writeJobs(jobs);
-  return NextResponse.json({ success: true });
+  try {
+    const jobs: Job[] = await req.json();
+    writeJobs(jobs);
+    return NextResponse.json({ success: true });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

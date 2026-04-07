@@ -121,7 +121,7 @@ export function generateInvoicePDF(data: InvoiceData): jsPDF {
 
   // Header row
   doc.setFillColor(teal);
-  doc.roundedRect(tableLeft, y, tableWidth, 24, 3, 3, 'F');
+  doc.rect(tableLeft, y, tableWidth, 24, 'F');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);

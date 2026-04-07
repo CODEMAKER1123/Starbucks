@@ -8,6 +8,7 @@ async function workizFetch(endpoint: string, options: RequestInit = {}) {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      'Authorization': `Bearer ${API_SECRET}`,
       ...options.headers,
     },
   });
