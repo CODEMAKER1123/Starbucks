@@ -66,15 +66,8 @@ export async function POST(req: NextRequest) {
 
       await sendEmail({
         to: 'documents@gosuperclean.com',
-        subject: `Starbucks #${body.storeNumber} - WO ${body.woNumber} - Invoice & Work Order`,
-        body: `
-          <p>Please find attached the Invoice and signed Work Order for:</p>
-          <p><strong>Starbucks #${body.storeNumber}</strong><br>
-          WO: ${body.woNumber}<br>
-          Service Date: ${body.invoiceData.serviceDate}<br>
-          ${body.invoiceData.address}, ${body.invoiceData.city}, ${body.invoiceData.state} ${body.invoiceData.zip}</p>
-          <p>Thank you,<br>Rolling Suds of Westchester-Stamford<br>(914) 588-4140</p>
-        `,
+        subject: `Starbucks #${body.storeNumber} WO# ${body.woNumber} Invoice`,
+        body: `<p>Attached is the invoice and signed WO for Starbucks #${body.storeNumber} WO# ${body.woNumber}. Let me know if you have any questions. Thanks.</p>`,
         attachments: [
           {
             name: `Invoice_SB${body.storeNumber}_WO${body.woNumber}.pdf`,
@@ -110,14 +103,8 @@ export async function POST(req: NextRequest) {
 
       await sendEmail({
         to: 'starbucks@gosuperclean.com',
-        subject: `Starbucks #${body.storeNumber} - WO ${body.woNumber} - Service Photos`,
-        body: `
-          <p>Please find attached the service photos for:</p>
-          <p><strong>Starbucks #${body.storeNumber}</strong><br>
-          WO: ${body.woNumber}</p>
-          <p>${attachments.length} photos attached (front door, before/after).</p>
-          <p>Thank you,<br>Rolling Suds of Westchester-Stamford<br>(914) 588-4140</p>
-        `,
+        subject: `Starbucks #${body.storeNumber} WO# ${body.woNumber} Pictures`,
+        body: `<p>Attached are the before/after pictures and front door photo for Starbucks #${body.storeNumber} WO# ${body.woNumber}. Let me know if you have any questions. Thanks.</p>`,
         attachments,
       });
 
