@@ -288,12 +288,12 @@ export function generateWorkOrderPDF(data: WorkOrderData): jsPDF {
 function formatDateFull(dateStr: string): string {
   if (!dateStr) return '';
   try {
-    const d = new Date(dateStr + 'T10:00:00');
+    const d = new Date(dateStr + 'T00:00:00');
     const day = d.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
     const month = d.getMonth() + 1;
     const date = d.getDate();
     const year = d.getFullYear();
-    return `${day} ${month}/${date}/${year} 10:00 AM`;
+    return `${day} ${month}/${date}/${year} 12:00 AM`;
   } catch {
     return dateStr;
   }
