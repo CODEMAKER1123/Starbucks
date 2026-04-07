@@ -117,7 +117,7 @@ export function generateWorkOrderPDF(data: WorkOrderData): jsPDF {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.text('Pressure Wash Patio/Sidewalk/Drive Thru', margin, y);
-  doc.text('COMPLETE______________', rightEdge - 140, y);
+  doc.text('COMPLETE_____X_____', rightEdge - 140, y);
   y += 16;
 
   // ─── INSTRUCTIONS PARAGRAPH ───
@@ -190,8 +190,8 @@ export function generateWorkOrderPDF(data: WorkOrderData): jsPDF {
   ];
 
   for (const item of checklistItems) {
-    doc.text('____', margin, y);
-    doc.text(item, margin + 28, y);
+    doc.text('_X_', margin, y);
+    doc.text(item, margin + 22, y);
     y += 12;
   }
 
