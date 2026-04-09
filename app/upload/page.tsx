@@ -30,9 +30,14 @@ export default function UploadPage() {
     const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
 
     const parsed: ParsedScheduleRow[] = jsonData.map((row) => {
-      const store = String(row['Store'] || row['store'] || '');
+      const store = String(row['Store'] || row['store'] || row['Store #'] || row['store #'] || '');
       const storeMatch = store.match(/#?\s*(\d+)/);
       const storeNumber = storeMatch ? storeMatch[1].padStart(5, '0') : store;
+
+      // Parse price from various possible column names
+      const rawPrice = row['Price'] || row['price'] || row['Amount'] || row['amount']
+        || row['Cost'] || row['cost'] || row['Rate'] || row['rate'] || '';
+      const parsedPrice = Number(rawPrice);
 
       return {
         night: Number(row['Night'] || row['night'] || 0),
@@ -42,10 +47,17 @@ export default function UploadPage() {
         address: String(row['Address'] || row['address'] || ''),
         city: String(row['City'] || row['city'] || ''),
         state: String(row['State'] || row['state'] || ''),
+        price: parsedPrice > 0 ? parsedPrice : undefined,
       };
     });
 
     setRows(parsed);
+    // Pre-populate prices from spreadsheet if available
+    const initialPrices: Record<number, number> = {};
+    parsed.forEach((row, i) => {
+      if (row.price) initialPrices[i] = row.price;
+    });
+    if (Object.keys(initialPrices).length > 0) setPrices(initialPrices);
     setMessage(`Parsed ${parsed.length} jobs from ${file.name}`);
   }, []);
 

@@ -37,4 +37,5 @@ export interface ParsedScheduleRow {
   address: string;
   city: string;
   state: string;
+  price?: number;
 }
