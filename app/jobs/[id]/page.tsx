@@ -200,9 +200,9 @@ export default function JobDetailPage() {
     return getPhotoUrl(photo);
   }
 
-  function autoFillTimesFromPhotos(photos: CCPhoto[]) {
+  async function autoFillTimesFromPhotos(photos: CCPhoto[]) {
     if (!job || photos.length === 0) return;
-    // Get timestamps from photos (captured_at or created_at, in seconds)
+    // Get timestamps from photos (captured_at or created_at)
     const timestamps = photos
       .map((p) => p.captured_at || p.created_at || 0)
       .filter((t) => t > 0);
@@ -211,18 +211,30 @@ export default function JobDetailPage() {
     const earliest = Math.min(...timestamps);
     const latest = Math.max(...timestamps);
 
-    // Convert Unix timestamps to HH:MM format
+    // CompanyCam may return seconds or milliseconds — normalize
     const toTimeStr = (ts: number) => {
-      const d = new Date(ts * 1000);
+      const ms = ts < 10000000000 ? ts * 1000 : ts;
+      const d = new Date(ms);
       return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
     };
 
     const startStr = toTimeStr(earliest);
     const stopStr = toTimeStr(latest);
 
-    // Only auto-fill if not already set
-    if (!job.startTime) updateField('startTime', startStr);
-    if (!job.stopTime) updateField('stopTime', stopStr);
+    // Update both via single API call to avoid state race condition
+    const updates: Record<string, string> = {};
+    if (!job.startTime) updates.startTime = startStr;
+    if (!job.stopTime) updates.stopTime = stopStr;
+
+    if (Object.keys(updates).length > 0) {
+      const updated = { ...job, ...updates, updatedAt: new Date().toISOString() };
+      setJob(updated);
+      await fetch(`/api/jobs/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+    }
   }
 
   function togglePhoto(url: string) {
