@@ -127,6 +127,7 @@ export default function JobDetailPage() {
       // Smart search: uses exact naming convention "Starbucks #00806 WO# 1963606"
       const params = new URLSearchParams({ storeNumber: job.storeNumber });
       if (job.woNumber) params.set('woNumber', job.woNumber);
+      if (job.address) params.set('address', job.address);
 
       const res = await fetch(`/api/companycam?${params}`);
       const data = await res.json();

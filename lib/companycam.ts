@@ -59,7 +59,8 @@ export async function searchProjects(query: string): Promise<CCProject[]> {
  */
 export async function findStarbucksProject(
   storeNumber: string,
-  woNumber?: string
+  woNumber?: string,
+  address?: string
 ): Promise<CCProject | null> {
   // Try exact search first: "Starbucks #00806 WO# 1963606"
   if (woNumber) {
@@ -80,17 +81,32 @@ export async function findStarbucksProject(
     p.name.includes(`#${storeNumber}`)
   );
 
-  if (matches.length === 0) return null;
-
-  // If WO number provided, prefer a match that contains it
-  if (woNumber) {
-    const woMatch = matches.find((p) => p.name.includes(woNumber));
-    if (woMatch) return woMatch;
+  if (matches.length > 0) {
+    // If WO number provided, prefer a match that contains it
+    if (woNumber) {
+      const woMatch = matches.find((p) => p.name.includes(woNumber));
+      if (woMatch) return woMatch;
+    }
+    // Return most recently updated match
+    matches.sort((a, b) => b.updated_at - a.updated_at);
+    return matches[0];
   }
 
-  // Return most recently updated match
-  matches.sort((a, b) => b.updated_at - a.updated_at);
-  return matches[0];
+  // Fallback: search by address
+  if (address) {
+    const addrResults = await searchProjects(address);
+    if (addrResults.length > 0) {
+      // Prefer results that mention the store number or "Starbucks"
+      const starbucksMatch = addrResults.find((p) =>
+        p.name.toLowerCase().includes('starbucks') || p.name.includes(storeNumber)
+      );
+      if (starbucksMatch) return starbucksMatch;
+      // Otherwise return the first result (likely matched by address)
+      return addrResults[0];
+    }
+  }
+
+  return null;
 }
 
 /**

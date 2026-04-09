@@ -22,11 +22,13 @@ export async function GET(req: NextRequest) {
     // Smart Starbucks project finder — uses exact naming convention
     // "Starbucks #00806 WO# 1963606"
     if (storeNumber) {
-      const project = await findStarbucksProject(storeNumber, woNumber || undefined);
+      const address = req.nextUrl.searchParams.get('address');
+      const project = await findStarbucksProject(storeNumber, woNumber || undefined, address || undefined);
 
       if (!project) {
         // Return all search results so user can pick manually
-        const fallbackResults = await searchProjects(`Starbucks #${storeNumber}`);
+        const fallbackQuery = address || `Starbucks #${storeNumber}`;
+        const fallbackResults = await searchProjects(fallbackQuery);
         return NextResponse.json({
           success: true,
           matched: false,
