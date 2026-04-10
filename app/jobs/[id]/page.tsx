@@ -643,47 +643,89 @@ export default function JobDetailPage() {
       <div className="bg-[#111827] rounded-lg border border-[#1f2937] p-6">
         <h2 className="text-lg font-semibold text-white mb-4">Workiz</h2>
         {job.workizJobId && (
-          <p className="text-gray-400 text-sm mb-4">
+          <p className="text-gray-400 text-sm mb-3">
             Job ID: <span className="text-white font-mono">{job.workizJobId}</span>
           </p>
         )}
-        <button
-          onClick={async () => {
-            if (!job.workizJobId) {
-              setEmailStatus('No Workiz Job ID — push the job to Workiz from the Upload page first.');
-              return;
-            }
-            setEmailStatus('');
-            try {
-              const res = await fetch('/api/workiz/invoice', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  JobUUID: job.workizJobId,
-                  Items: [{
-                    description: `Pressure Wash Patio/Sidewalk/Drive Thru - Starbucks #${job.storeNumber}`,
-                    quantity: 1,
-                    price: job.price || 350,
-                  }],
-                }),
-              });
-              const data = await res.json();
-              if (data.error) {
-                setEmailStatus(`Workiz invoice failed: ${data.error}`);
-              } else {
-                setEmailStatus('Invoice created in Workiz!');
+        <div className="flex flex-wrap gap-3">
+          {!job.workizJobId && (
+            <button
+              onClick={async () => {
+                setEmailStatus('');
+                try {
+                  const res = await fetch('/api/workiz/jobs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      FirstName: `Starbucks #${job.storeNumber}`,
+                      Address: job.address,
+                      City: job.city,
+                      State: job.state,
+                      Country: 'US',
+                      PostalCode: job.zip || '',
+                      Phone: job.storePhone || '',
+                      JobDescription: `Pressure Wash Patio/Sidewalk/Drive Thru - Starbucks #${job.storeNumber}`,
+                      JobDateTime: job.serviceDate + ' 22:00',
+                    }),
+                  });
+                  const data = await res.json();
+                  if (data.error) {
+                    setEmailStatus(`Workiz push failed: ${data.error}`);
+                  } else {
+                    const workizUuid = data?.data?.UUID || data?.UUID || data?.uuid;
+                    if (workizUuid) {
+                      await updateField('workizJobId', workizUuid);
+                    }
+                    setEmailStatus('Job pushed to Workiz!');
+                    refreshJob();
+                  }
+                } catch {
+                  setEmailStatus('Failed to push to Workiz.');
+                }
+              }}
+              className="px-4 py-2 bg-[#00A4C7] text-white rounded text-sm font-medium hover:bg-[#0090b0] transition-colors"
+            >
+              Push Job to Workiz
+            </button>
+          )}
+          <button
+            onClick={async () => {
+              if (!job.workizJobId) {
+                setEmailStatus('Push job to Workiz first.');
+                return;
               }
-            } catch {
-              setEmailStatus('Failed to create Workiz invoice.');
-            }
-          }}
-          disabled={!job.workizJobId}
-          className="px-4 py-2 bg-[#00A4C7] text-white rounded text-sm font-medium hover:bg-[#0090b0] transition-colors disabled:opacity-50"
-        >
-          Create Invoice in Workiz
-        </button>
+              setEmailStatus('');
+              try {
+                const res = await fetch('/api/workiz/invoice', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    JobUUID: job.workizJobId,
+                    Items: [{
+                      description: `Pressure Wash Patio/Sidewalk/Drive Thru - Starbucks #${job.storeNumber}`,
+                      quantity: 1,
+                      price: job.price || 350,
+                    }],
+                  }),
+                });
+                const data = await res.json();
+                if (data.error) {
+                  setEmailStatus(`Workiz invoice failed: ${data.error}`);
+                } else {
+                  setEmailStatus('Invoice created in Workiz!');
+                }
+              } catch {
+                setEmailStatus('Failed to create Workiz invoice.');
+              }
+            }}
+            disabled={!job.workizJobId}
+            className="px-4 py-2 bg-[#00A4C7] text-white rounded text-sm font-medium hover:bg-[#0090b0] transition-colors disabled:opacity-50"
+          >
+            Create Invoice in Workiz
+          </button>
+        </div>
         {!job.workizJobId && (
-          <p className="text-yellow-500 text-xs mt-2">Push job to Workiz from Upload page first to get a Job ID</p>
+          <p className="text-gray-500 text-xs mt-2">Push this job to Workiz to enable invoice creation</p>
         )}
       </div>
     </div>

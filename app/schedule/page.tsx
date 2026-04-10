@@ -72,6 +72,43 @@ export default function SchedulePage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-white">Schedule</h1>
         <div className="flex items-center gap-2">
+          <button
+            onClick={async () => {
+              const unpushed = jobs.filter((j) => !j.workizJobId);
+              if (unpushed.length === 0) { alert('All jobs already pushed to Workiz.'); return; }
+              if (!confirm(`Push ${unpushed.length} job(s) to Workiz?`)) return;
+              let ok = 0, fail = 0;
+              for (const job of unpushed) {
+                try {
+                  const res = await fetch('/api/workiz/jobs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      FirstName: `Starbucks #${job.storeNumber}`,
+                      Address: job.address, City: job.city, State: job.state, Country: 'US',
+                      JobDescription: `Pressure Wash Patio/Sidewalk/Drive Thru - Starbucks #${job.storeNumber}`,
+                      JobDateTime: job.serviceDate + ' 22:00',
+                    }),
+                  });
+                  const data = await res.json();
+                  const uuid = data?.data?.UUID || data?.UUID || data?.uuid;
+                  if (uuid) {
+                    await fetch(`/api/jobs/${job.id}`, {
+                      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ workizJobId: uuid }),
+                    });
+                  }
+                  if (!data.error) ok++; else fail++;
+                } catch { fail++; }
+              }
+              alert(`Workiz: ${ok} pushed, ${fail} failed.`);
+              const r = await fetch('/api/jobs'); const d = await r.json();
+              if (Array.isArray(d)) setJobs(d);
+            }}
+            className="px-3 py-1 rounded text-sm bg-[#1f2937] text-gray-300 hover:bg-[#374151] border border-[#374151]"
+          >
+            Push All to Workiz
+          </button>
           <button onClick={() => setView('week')} className={`px-3 py-1 rounded text-sm ${view === 'week' ? 'bg-[#00A4C7] text-white' : 'text-gray-400 hover:text-white'}`}>Week</button>
           <button onClick={() => setView('month')} className={`px-3 py-1 rounded text-sm ${view === 'month' ? 'bg-[#00A4C7] text-white' : 'text-gray-400 hover:text-white'}`}>Month</button>
         </div>
