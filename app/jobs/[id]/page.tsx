@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Job } from '@/lib/types';
-import { DEFAULT_PRICE } from '@/lib/constants';
+import { DEFAULT_PRICE, DEFAULT_SALES_TAX, DEFAULT_TOTAL_PRICE } from '@/lib/constants';
+import { buildCompanyCamTimeAutofill } from '@/lib/companycam-time';
+import { getJob, updateJob as updateStoredJob } from '@/lib/store';
 import { useTechnicians } from '@/lib/use-technicians';
 
 interface CCProject {
@@ -17,6 +19,8 @@ interface CCPhoto {
   uris?: Array<{ type: string; uri: string }>;
   uri?: string;
   photo_url?: string;
+  captured_at?: number;
+  created_at?: number;
 }
 
 export default function JobDetailPage() {
@@ -34,6 +38,7 @@ export default function JobDetailPage() {
   const [ccSearching, setCcSearching] = useState(false);
   const [ccLoadingPhotos, setCcLoadingPhotos] = useState(false);
   const [ccError, setCcError] = useState('');
+  const [ccAutofillNote, setCcAutofillNote] = useState('');
 
   // Email state
   const [emailConfigured, setEmailConfigured] = useState(false);
@@ -41,39 +46,58 @@ export default function JobDetailPage() {
   const [sendingPhotos, setSendingPhotos] = useState(false);
   const [emailStatus, setEmailStatus] = useState('');
 
-  function refreshJob() {
-    fetch(`/api/jobs/${id}`).then((r) => r.json()).then(setJob).catch(() => {});
-  }
-
   useEffect(() => {
-    fetch(`/api/jobs/${id}`)
-      .then((r) => {
-        if (!r.ok) throw new Error('Not found');
-        return r.json();
-      })
-      .then(setJob)
-      .catch(() => setJob(null))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const loadedJob = await getJob(id);
+        if (!cancelled) setJob(loadedJob);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
 
     fetch('/api/email')
       .then((r) => r.json())
-      .then((d) => setEmailConfigured(d.configured))
+      .then((d) => { if (!cancelled) setEmailConfigured(d.configured); })
       .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   async function updateField(field: string, value: string | number) {
     if (!job) return;
-    const updated = { ...job, [field]: value, updatedAt: new Date().toISOString() };
-    setJob(updated);
-    await fetch(`/api/jobs/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ [field]: value }),
+    const updated = await updateStoredJob(id, { [field]: value } as Partial<Job>);
+    if (updated) setJob(updated);
+  }
+
+  async function logEmail(type: 'documents' | 'photos', to: string, subject: string, test: boolean) {
+    const updated = await updateStoredJob(id, {
+      emailLogs: [
+        ...(job?.emailLogs || []),
+        { type, to, subject, sentAt: new Date().toISOString(), test },
+      ],
     });
+    if (updated) setJob(updated);
   }
 
   async function updateStatus(status: Job['status']) {
     await updateField('status', status);
+  }
+
+  async function autofillTimesFromPhotos(photos: CCPhoto[]) {
+    if (!job) return;
+
+    const result = buildCompanyCamTimeAutofill(job, photos);
+    setCcAutofillNote(result.note);
+
+    if (Object.keys(result.updates).length === 0) return;
+
+    const updated = await updateStoredJob(id, result.updates);
+    if (updated) setJob(updated);
   }
 
   async function generateDoc(type: 'invoice' | 'work-order' | 'both') {
@@ -87,6 +111,8 @@ export default function JobDetailPage() {
         const inv = generateInvoicePDF({
           storeNumber: job.storeNumber, woNumber: job.woNumber || '',
           invoiceNumber: job.invoiceNumber || '', price: job.price || DEFAULT_PRICE,
+          salesTax: job.salesTax || DEFAULT_SALES_TAX,
+          totalPrice: job.totalPrice || DEFAULT_TOTAL_PRICE,
           serviceDate: job.serviceDate, address: job.address,
           city: job.city, state: job.state, zip: job.zip || '',
         });
@@ -120,6 +146,7 @@ export default function JobDetailPage() {
     setCcProjects([]);
     setSelectedPhotos(new Set());
     setCcMatchedProject('');
+    setCcAutofillNote('');
 
     try {
       // Smart search: uses exact naming convention "Starbucks #00806 WO# 1963606"
@@ -138,10 +165,12 @@ export default function JobDetailPage() {
       if (data.matched && data.project) {
         // Exact match found — photos already loaded
         setCcMatchedProject(data.project.name);
-        setCcPhotos(data.photos || []);
+        const matchedPhotos = data.photos || [];
+        setCcPhotos(matchedPhotos);
         // Auto-select all photos (typically exactly 5)
-        const allUrls = (data.photos || []).map((p: CCPhoto) => getPhotoUrl(p)).filter(Boolean);
+        const allUrls = matchedPhotos.map((p: CCPhoto) => getPhotoUrl(p)).filter(Boolean);
         setSelectedPhotos(new Set(allUrls));
+        await autofillTimesFromPhotos(matchedPhotos);
       } else {
         // No exact match — show search results for manual selection
         setCcProjects(data.searchResults || []);
@@ -150,6 +179,7 @@ export default function JobDetailPage() {
         } else {
           setCcError(data.message || 'No exact match. Select a project below.');
         }
+        setCcAutofillNote('');
       }
     } catch {
       setCcError('Failed to connect to CompanyCam.');
@@ -164,12 +194,14 @@ export default function JobDetailPage() {
       const res = await fetch(`/api/companycam?projectId=${projectId}`);
       const data = await res.json();
       if (data.success && data.photos) {
-        setCcPhotos(data.photos);
+        const loadedPhotos = data.photos;
+        setCcPhotos(loadedPhotos);
         setCcProjects([]);
         setCcMatchedProject(projectName || '');
         // Auto-select all photos
-        const allUrls = data.photos.map((p: CCPhoto) => getPhotoUrl(p)).filter(Boolean);
+        const allUrls = loadedPhotos.map((p: CCPhoto) => getPhotoUrl(p)).filter(Boolean);
         setSelectedPhotos(new Set(allUrls));
+        await autofillTimesFromPhotos(loadedPhotos);
       }
     } catch {
       setCcError('Failed to load photos.');
@@ -220,6 +252,8 @@ export default function JobDetailPage() {
           invoiceData: {
             invoiceNumber: job.invoiceNumber || '',
             price: job.price || DEFAULT_PRICE,
+            salesTax: job.salesTax || DEFAULT_SALES_TAX,
+            totalPrice: job.totalPrice || DEFAULT_TOTAL_PRICE,
             serviceDate: job.serviceDate,
             address: job.address,
             city: job.city,
@@ -242,7 +276,12 @@ export default function JobDetailPage() {
       const data = await res.json();
       if (data.success) {
         setEmailStatus(test ? 'Test sent to your email' :'Documents sent to documents@gosuperclean.com');
-        refreshJob();
+        await logEmail(
+          'documents',
+          test ? 'test recipient' : 'documents@gosuperclean.com',
+          `${test ? '[TEST] ' : ''}Starbucks #${job.storeNumber} WO# ${job.woNumber || ''} Invoice`,
+          !!test,
+        );
       } else {
         setEmailStatus(`Failed: ${data.error}`);
       }
@@ -273,7 +312,12 @@ export default function JobDetailPage() {
       const data = await res.json();
       if (data.success) {
         setEmailStatus(test ? 'Test sent to your email' :'Photos sent to starbucks@gosuperclean.com');
-        refreshJob();
+        await logEmail(
+          'photos',
+          test ? 'test recipient' : 'starbucks@gosuperclean.com',
+          `${test ? '[TEST] ' : ''}Starbucks #${job.storeNumber} WO# ${job.woNumber || ''} Pictures`,
+          !!test,
+        );
       } else {
         setEmailStatus(`Failed: ${data.error}`);
       }
@@ -347,7 +391,9 @@ export default function JobDetailPage() {
               {technicians.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
-          <EditField label="Price" value={String(job.price || DEFAULT_PRICE)} type="number" onSave={(v) => updateField('price', Number(v))} />
+          <EditField label="Revenue" value={String(job.price || DEFAULT_PRICE)} type="number" onSave={() => {}} readOnly />
+          <EditField label="Sales Tax" value={String(job.salesTax || DEFAULT_SALES_TAX)} type="number" onSave={() => {}} readOnly />
+          <EditField label="Total" value={String(job.totalPrice || DEFAULT_TOTAL_PRICE)} type="number" onSave={() => {}} readOnly />
           <EditField label="Service Date" value={job.serviceDate} type="date" onSave={(v) => updateField('serviceDate', v)} />
           <EditField label="Night #" value={String(job.nightNumber || '')} type="number" onSave={(v) => updateField('nightNumber', Number(v))} />
           <EditField label="Start Time" value={job.startTime || ''} type="time" onSave={(v) => updateField('startTime', v)} />
@@ -401,6 +447,7 @@ export default function JobDetailPage() {
         )}
 
         {ccError && <p className="text-yellow-400 text-sm mb-3">{ccError}</p>}
+        {ccAutofillNote && <p className="text-green-400 text-sm mb-3">{ccAutofillNote}</p>}
 
         {/* Fallback: manual project selection when no exact match */}
         {ccProjects.length > 0 && ccPhotos.length === 0 && (
@@ -608,11 +655,13 @@ function EditField({
   value,
   type = 'text',
   onSave,
+  readOnly = false,
 }: {
   label: string;
   value: string;
   type?: string;
   onSave: (v: string) => void;
+  readOnly?: boolean;
 }) {
   const [localVal, setLocalVal] = useState(value);
   const [editing, setEditing] = useState(false);
@@ -632,11 +681,12 @@ function EditField({
       <input
         type={type}
         value={displayVal}
-        onFocus={() => { setEditing(true); setLocalVal(value); }}
+        readOnly={readOnly}
+        onFocus={() => { if (!readOnly) { setEditing(true); setLocalVal(value); } }}
         onChange={(e) => { setLocalVal(e.target.value); }}
-        onBlur={handleBlur}
-        onKeyDown={(e) => { if (e.key === 'Enter') handleBlur(); }}
-        className="w-full bg-[#0a0f1a] border border-[#374151] rounded px-3 py-2 text-sm text-gray-100 focus:border-[#00A4C7] focus:outline-none"
+        onBlur={() => { if (!readOnly) handleBlur(); }}
+        onKeyDown={(e) => { if (!readOnly && e.key === 'Enter') handleBlur(); }}
+        className="w-full bg-[#0a0f1a] border border-[#374151] rounded px-3 py-2 text-sm text-gray-100 focus:border-[#00A4C7] focus:outline-none read-only:text-gray-400"
       />
     </div>
   );

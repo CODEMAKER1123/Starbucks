@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { DEFAULT_PRICE } from '@/lib/constants';
+import { DEFAULT_PRICE, DEFAULT_SALES_TAX, DEFAULT_TOTAL_PRICE } from '@/lib/constants';
+import { addJobs } from '@/lib/store';
 import { useTechnicians } from '@/lib/use-technicians';
 
 type Tab = 'input' | 'invoice' | 'work-order';
@@ -146,6 +147,8 @@ export default function GeneratePage() {
       zip,
       storePhone: form.storePhone || undefined,
       price: parseFloat(form.price) || DEFAULT_PRICE,
+      salesTax: DEFAULT_SALES_TAX,
+      totalPrice: DEFAULT_TOTAL_PRICE,
       serviceDate: form.serviceDate,
       assignedTech: form.technician || undefined,
       startTime: form.startTime || undefined,
@@ -155,15 +158,8 @@ export default function GeneratePage() {
       updatedAt: new Date().toISOString(),
     };
 
-    const res = await fetch('/api/jobs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(job),
-    });
-
-    if (res.ok) {
-      setSaved(true);
-    }
+    await addJobs(job);
+    setSaved(true);
   }
 
   const tabs: { key: Tab; label: string }[] = [
@@ -213,7 +209,12 @@ export default function GeneratePage() {
             {/* Row 2: Invoice # and Price */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Field label="INVOICE #" value={form.invoiceNumber} onChange={(v) => update('invoiceNumber', v)} placeholder="160" />
-              <Field label="PRICE ($)" value={form.price} onChange={(v) => update('price', v)} type="number" />
+              <Field label="REVENUE ($)" value={form.price} onChange={(v) => update('price', v)} type="number" readOnly />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="SALES TAX ($)" value={DEFAULT_SALES_TAX.toFixed(2)} onChange={() => {}} readOnly />
+              <Field label="TOTAL ($)" value={DEFAULT_TOTAL_PRICE.toFixed(2)} onChange={() => {}} readOnly />
             </div>
 
             {/* Row 3: Service Date and Technician */}
@@ -321,12 +322,14 @@ function Field({
   onChange,
   placeholder,
   type = 'text',
+  readOnly = false,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   type?: string;
+  readOnly?: boolean;
 }) {
   return (
     <div>
@@ -336,7 +339,8 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full bg-[#0a0f1a] border border-[#374151] rounded-lg px-4 py-3 text-sm text-gray-100 placeholder-gray-600 focus:border-[#00A4C7] focus:outline-none"
+        readOnly={readOnly}
+        className="w-full bg-[#0a0f1a] border border-[#374151] rounded-lg px-4 py-3 text-sm text-gray-100 placeholder-gray-600 focus:border-[#00A4C7] focus:outline-none read-only:text-gray-400"
       />
     </div>
   );

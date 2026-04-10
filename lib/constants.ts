@@ -1,11 +1,11 @@
 export const DEFAULT_TECHNICIANS = [
-  'Max Gelfman',
-  'Alexander Cardone',
-  'Alejandro Claudio',
-  'Jovens Toussaint',
+  'Kael Brown',
+  'Izzy Kemp',
 ];
 
-export const DEFAULT_PRICE = 350;
+export const DEFAULT_PRICE = 320;
+export const DEFAULT_SALES_TAX = 19.2;
+export const DEFAULT_TOTAL_PRICE = 339;
 
 export const COMPANY = {
   name: process.env.NEXT_PUBLIC_COMPANY_NAME || 'Rolling Suds of Westchester-Stamford',

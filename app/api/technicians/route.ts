@@ -25,6 +25,20 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function PUT(req: NextRequest) {
+  try {
+    const techs = await req.json();
+    if (!Array.isArray(techs) || !techs.every((t) => typeof t === 'string')) {
+      return NextResponse.json({ error: 'Technicians must be a string array' }, { status: 400 });
+    }
+    await setTechnicians(techs);
+    return NextResponse.json({ success: true, technicians: techs });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   try {
     const { name } = await req.json();

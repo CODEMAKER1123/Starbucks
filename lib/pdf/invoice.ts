@@ -1,11 +1,13 @@
 import { jsPDF } from 'jspdf';
-import { COMPANY, SERVICE_TITLE } from '../constants';
+import { COMPANY, DEFAULT_SALES_TAX, DEFAULT_TOTAL_PRICE, SERVICE_TITLE } from '../constants';
 
 interface InvoiceData {
   storeNumber: string;
   woNumber: string;
   invoiceNumber: string;
   price: number;
+  salesTax?: number;
+  totalPrice?: number;
   serviceDate: string;
   address: string;
   city: string;
@@ -60,6 +62,9 @@ export function generateInvoicePDF(data: InvoiceData): jsPDF {
   doc.setFontSize(9);
 
   const formattedDate = formatDateLong(data.serviceDate);
+  const subtotal = data.price;
+  const salesTax = data.salesTax ?? DEFAULT_SALES_TAX;
+  const totalPrice = data.totalPrice ?? DEFAULT_TOTAL_PRICE;
 
   const metaFields = [
     ['Invoice #', data.invoiceNumber || ''],
@@ -165,8 +170,8 @@ export function generateInvoicePDF(data: InvoiceData): jsPDF {
   doc.setFontSize(9);
   doc.setTextColor(darkGray);
   doc.text('1', colQty + 5, y + 18);
-  doc.text(`$${data.price.toFixed(2)}`, colPrice, y + 18);
-  doc.text(`$${data.price.toFixed(2)}`, colAmount, y + 18);
+  doc.text(`$${subtotal.toFixed(2)}`, colPrice, y + 18);
+  doc.text(`$${subtotal.toFixed(2)}`, colAmount, y + 18);
 
   y += bodyHeight + 20;
 
@@ -179,20 +184,28 @@ export function generateInvoicePDF(data: InvoiceData): jsPDF {
   doc.setTextColor(gray);
   doc.text('Sub total', totalsLabelX, y, { align: 'right' });
   doc.setTextColor(darkGray);
-  doc.text(`$${data.price.toFixed(2)}`, totalsValX, y, { align: 'right' });
+  doc.text(`$${subtotal.toFixed(2)}`, totalsValX, y, { align: 'right' });
+  y += 18;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(gray);
+  doc.text('Sales tax', totalsLabelX, y, { align: 'right' });
+  doc.setTextColor(darkGray);
+  doc.text(`$${salesTax.toFixed(2)}`, totalsValX, y, { align: 'right' });
   y += 18;
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(darkGray);
   doc.text('Total', totalsLabelX, y, { align: 'right' });
-  doc.text(`$${data.price.toFixed(2)}`, totalsValX, y, { align: 'right' });
+  doc.text(`$${totalPrice.toFixed(2)}`, totalsValX, y, { align: 'right' });
   y += 20;
 
   doc.setTextColor(teal);
   doc.setFontSize(10);
   doc.text('Balance Due', totalsLabelX, y, { align: 'right' });
-  doc.text(`$${data.price.toFixed(2)}`, totalsValX, y, { align: 'right' });
+  doc.text(`$${totalPrice.toFixed(2)}`, totalsValX, y, { align: 'right' });
 
   // Bottom teal bar
   const pageHeight = doc.internal.pageSize.getHeight();

@@ -1,6 +1,7 @@
 const TOKENS = [
+  process.env.COMPANYCAM_API_TOKEN,
   process.env.COMPANYCAM_API_TOKEN_BALTIMORE,
-  process.env.COMPANYCAM_API_TOKEN_LANCASTER
+  process.env.COMPANYCAM_API_TOKEN_LANCASTER,
 ].filter(Boolean) as string[];
 
 const BASE_URL = 'https://api.companycam.com/v2';

@@ -3,19 +3,27 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Job } from '@/lib/types';
+import { getJobs } from '@/lib/store';
 
 export default function Dashboard() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/jobs')
-      .then((r) => r.json())
-      .then((data) => {
-        setJobs(Array.isArray(data) ? data : []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const data = await getJobs();
+        if (!cancelled) setJobs(data);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const today = new Date().toISOString().split('T')[0];

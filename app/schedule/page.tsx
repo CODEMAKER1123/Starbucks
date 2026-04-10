@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Job } from '@/lib/types';
+import { buildCompanyCamTimeAutofill } from '@/lib/companycam-time';
 import { useTechnicians } from '@/lib/use-technicians';
+import { getJobs, updateJob } from '@/lib/store';
 
 type ViewMode = 'week' | 'month';
 
@@ -15,12 +17,24 @@ export default function SchedulePage() {
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [bulkTech, setBulkTech] = useState('');
   const [loading, setLoading] = useState(true);
+  const [bulkFillingTimes, setBulkFillingTimes] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState('');
 
   useEffect(() => {
-    fetch('/api/jobs')
-      .then((r) => r.json())
-      .then((data) => { setJobs(Array.isArray(data) ? data : []); setLoading(false); })
-      .catch(() => setLoading(false));
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const data = await getJobs();
+        if (!cancelled) setJobs(data);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const dates = view === 'week' ? getWeekDates(currentDate) : getMonthDates(currentDate);
@@ -50,17 +64,63 @@ export default function SchedulePage() {
     for (const id of selectedJobs) {
       const job = updated.find((j) => j.id === id);
       if (job) {
-        await fetch(`/api/jobs/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ assignedTech: bulkTech }),
-        });
+        await updateJob(id, { assignedTech: bulkTech });
       }
     }
 
     setJobs(updated);
     setSelectedJobs(new Set());
     setBulkTech('');
+  }
+
+  async function bulkAutofillTimes() {
+    if (selectedJobs.size === 0 || bulkFillingTimes) return;
+
+    setBulkFillingTimes(true);
+    setBulkStatus('Checking CompanyCam photo times...');
+
+    let updatedCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
+
+    const nextJobs = [...jobs];
+
+    for (const id of selectedJobs) {
+      const index = nextJobs.findIndex((job) => job.id === id);
+      if (index === -1) continue;
+
+      const job = nextJobs[index];
+
+      try {
+        const params = new URLSearchParams({ storeNumber: job.storeNumber });
+        if (job.woNumber) params.set('woNumber', job.woNumber);
+
+        const res = await fetch(`/api/companycam?${params.toString()}`);
+        const data = await res.json();
+
+        const photos = Array.isArray(data?.photos) ? data.photos : [];
+        const result = buildCompanyCamTimeAutofill(job, photos);
+
+        if (Object.keys(result.updates).length === 0) {
+          skippedCount++;
+          continue;
+        }
+
+        const updated = await updateJob(job.id, result.updates);
+        if (updated) {
+          nextJobs[index] = updated;
+          updatedCount++;
+        } else {
+          errorCount++;
+        }
+      } catch {
+        errorCount++;
+      }
+    }
+
+    setJobs(nextJobs);
+    setBulkFillingTimes(false);
+    setBulkStatus(`CompanyCam batch fill done. Updated ${updatedCount}, skipped ${skippedCount}, errors ${errorCount}.`);
   }
 
   const headerLabel = view === 'week'
@@ -79,18 +139,28 @@ export default function SchedulePage() {
 
       {/* Bulk assign */}
       {selectedJobs.size > 0 && (
-        <div className="bg-[#111827] border border-[#00A4C7] rounded-lg p-3 flex items-center gap-3">
-          <span className="text-sm text-[#00A4C7]">{selectedJobs.size} selected</span>
-          <select
-            value={bulkTech}
-            onChange={(e) => setBulkTech(e.target.value)}
-            className="bg-[#0a0f1a] border border-[#374151] rounded px-2 py-1 text-sm text-gray-100"
-          >
-            <option value="">Assign tech...</option>
-            {technicians.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <button onClick={bulkAssign} disabled={!bulkTech} className="px-3 py-1 bg-[#00A4C7] text-white rounded text-sm disabled:opacity-50">Assign</button>
-          <button onClick={() => setSelectedJobs(new Set())} className="px-3 py-1 text-gray-400 hover:text-white text-sm">Clear</button>
+        <div className="bg-[#111827] border border-[#00A4C7] rounded-lg p-3 space-y-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm text-[#00A4C7]">{selectedJobs.size} selected</span>
+            <select
+              value={bulkTech}
+              onChange={(e) => setBulkTech(e.target.value)}
+              className="bg-[#0a0f1a] border border-[#374151] rounded px-2 py-1 text-sm text-gray-100"
+            >
+              <option value="">Assign tech...</option>
+              {technicians.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <button onClick={bulkAssign} disabled={!bulkTech} className="px-3 py-1 bg-[#00A4C7] text-white rounded text-sm disabled:opacity-50">Assign</button>
+            <button
+              onClick={bulkAutofillTimes}
+              disabled={bulkFillingTimes}
+              className="px-3 py-1 bg-green-600 text-white rounded text-sm disabled:opacity-50"
+            >
+              {bulkFillingTimes ? 'Filling Times...' : 'Fill Times from CompanyCam'}
+            </button>
+            <button onClick={() => setSelectedJobs(new Set())} className="px-3 py-1 text-gray-400 hover:text-white text-sm">Clear</button>
+          </div>
+          {bulkStatus && <p className="text-xs text-gray-400">{bulkStatus}</p>}
         </div>
       )}
 

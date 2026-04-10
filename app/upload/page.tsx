@@ -2,14 +2,14 @@
 
 import { useState, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { DEFAULT_PRICE } from '@/lib/constants';
+import { DEFAULT_PRICE, DEFAULT_SALES_TAX, DEFAULT_TOTAL_PRICE } from '@/lib/constants';
+import { addJobs } from '@/lib/store';
 import { useTechnicians } from '@/lib/use-technicians';
 import { Job, ParsedScheduleRow } from '@/lib/types';
 
 export default function UploadPage() {
   const technicians = useTechnicians();
   const [rows, setRows] = useState<ParsedScheduleRow[]>([]);
-  const [prices, setPrices] = useState<Record<number, number>>({});
   const [techs, setTechs] = useState<Record<number, string>>({});
   const [defaultTech, setDefaultTech] = useState('');
   const [pushing, setPushing] = useState(false);
@@ -33,6 +33,8 @@ export default function UploadPage() {
       const store = String(row['Store'] || row['store'] || '');
       const storeMatch = store.match(/#?\s*(\d+)/);
       const storeNumber = storeMatch ? storeMatch[1].padStart(5, '0') : store;
+      const woRaw = row['WO Number'] || row['WO number'] || row['woNumber'] || row['WO#'] || row['WO #'] || '';
+      const workizRaw = row['Workiz Job ID'] || row['workizJobId'] || row['WorkizJobId'] || row['Job ID'] || '';
 
       return {
         night: Number(row['Night'] || row['night'] || 0),
@@ -42,6 +44,8 @@ export default function UploadPage() {
         address: String(row['Address'] || row['address'] || ''),
         city: String(row['City'] || row['city'] || ''),
         state: String(row['State'] || row['state'] || ''),
+        woNumber: woRaw ? String(woRaw).trim() : undefined,
+        workizJobId: workizRaw ? String(workizRaw).trim() : undefined,
       };
     });
 
@@ -52,11 +56,15 @@ export default function UploadPage() {
   async function saveLocally() {
     const jobs: Job[] = rows.map((row, i) => ({
       id: uuidv4(),
+      workizJobId: row.workizJobId,
       storeNumber: row.storeNumber,
+      woNumber: row.woNumber,
       address: row.address,
       city: row.city,
       state: row.state,
-      price: prices[i] ?? DEFAULT_PRICE,
+      price: DEFAULT_PRICE,
+      salesTax: DEFAULT_SALES_TAX,
+      totalPrice: DEFAULT_TOTAL_PRICE,
       serviceDate: row.date,
       nightNumber: row.night,
       assignedTech: techs[i] || defaultTech || undefined,
@@ -65,19 +73,9 @@ export default function UploadPage() {
       updatedAt: new Date().toISOString(),
     }));
 
-    const res = await fetch('/api/jobs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(jobs),
-    });
-
-    if (res.ok) {
-      setMessage(`Saved ${jobs.length} jobs! Redirecting to schedule...`);
-      setTimeout(() => { window.location.href = '/schedule'; }, 1500);
-    } else {
-      const data = await res.json().catch(() => ({}));
-      setMessage(`Failed to save: ${data.error || 'Unknown error'}`);
-    }
+    await addJobs(jobs);
+    setMessage(`Saved ${jobs.length} jobs to the shared schedule. Redirecting to schedule...`);
+    setTimeout(() => { window.location.href = '/schedule'; }, 1500);
   }
 
   async function pushToWorkiz() {
@@ -174,36 +172,10 @@ export default function UploadPage() {
             <h2 className="text-lg font-semibold text-white">{rows.length} Jobs Parsed</h2>
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
-                <label className="text-sm text-gray-400">All Prices:</label>
-                <input
-                  type="number"
-                  placeholder="350"
-                  className="w-20 bg-[#0a0f1a] border border-[#374151] rounded px-2 py-1 text-sm text-gray-100"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      const val = Number((e.target as HTMLInputElement).value);
-                      if (val > 0) {
-                        const newPrices: Record<number, number> = {};
-                        rows.forEach((_, i) => { newPrices[i] = val; });
-                        setPrices(newPrices);
-                      }
-                    }
-                  }}
-                />
-                <button
-                  onClick={() => {
-                    const input = document.querySelector<HTMLInputElement>('input[placeholder="350"]');
-                    const val = Number(input?.value);
-                    if (val > 0) {
-                      const newPrices: Record<number, number> = {};
-                      rows.forEach((_, i) => { newPrices[i] = val; });
-                      setPrices(newPrices);
-                    }
-                  }}
-                  className="px-2 py-1 bg-[#374151] text-gray-300 rounded text-xs hover:bg-[#4b5563] transition-colors"
-                >
-                  Set All
-                </button>
+                <label className="text-sm text-gray-400">Pricing:</label>
+                <div className="text-sm text-white bg-[#0a0f1a] border border-[#374151] rounded px-3 py-1">
+                  $320 + $19.20 tax = $339 total
+                </div>
               </div>
               <label className="text-sm text-gray-400">Default Tech:</label>
               <select
@@ -226,9 +198,12 @@ export default function UploadPage() {
                   <th className="pb-2 pr-3">Night</th>
                   <th className="pb-2 pr-3">Date</th>
                   <th className="pb-2 pr-3">Store #</th>
+                  <th className="pb-2 pr-3">WO #</th>
                   <th className="pb-2 pr-3">Address</th>
                   <th className="pb-2 pr-3">City</th>
-                  <th className="pb-2 pr-3">Price</th>
+                  <th className="pb-2 pr-3">Revenue</th>
+                  <th className="pb-2 pr-3">Tax</th>
+                  <th className="pb-2 pr-3">Total</th>
                   <th className="pb-2">Tech</th>
                 </tr>
               </thead>
@@ -238,16 +213,12 @@ export default function UploadPage() {
                     <td className="py-2 pr-3 text-gray-400">{row.night}</td>
                     <td className="py-2 pr-3 text-gray-300">{row.date}</td>
                     <td className="py-2 pr-3 text-white font-mono">{row.storeNumber}</td>
+                    <td className="py-2 pr-3 text-gray-300 font-mono">{row.woNumber || '—'}</td>
                     <td className="py-2 pr-3 text-gray-300">{row.address}</td>
                     <td className="py-2 pr-3 text-gray-300">{row.city}, {row.state}</td>
-                    <td className="py-2 pr-3">
-                      <input
-                        type="number"
-                        value={prices[i] ?? DEFAULT_PRICE}
-                        onChange={(e) => setPrices((p) => ({ ...p, [i]: Number(e.target.value) }))}
-                        className="w-20 bg-[#0a0f1a] border border-[#374151] rounded px-2 py-1 text-sm text-gray-100"
-                      />
-                    </td>
+                    <td className="py-2 pr-3 text-white">${DEFAULT_PRICE.toFixed(2)}</td>
+                    <td className="py-2 pr-3 text-white">${DEFAULT_SALES_TAX.toFixed(2)}</td>
+                    <td className="py-2 pr-3 text-white">${DEFAULT_TOTAL_PRICE.toFixed(2)}</td>
                     <td className="py-2">
                       <select
                         value={techs[i] || defaultTech}

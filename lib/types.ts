@@ -18,6 +18,8 @@ export interface Job {
   zip?: string;
   storePhone?: string;
   price: number;
+  salesTax?: number;
+  totalPrice?: number;
   serviceDate: string;
   nightNumber?: number;
   assignedTech?: string;
@@ -37,4 +39,6 @@ export interface ParsedScheduleRow {
   address: string;
   city: string;
   state: string;
+  woNumber?: string;
+  workizJobId?: string;
 }

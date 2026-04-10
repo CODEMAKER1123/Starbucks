@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { getTechnicians, saveTechnicians } from '@/lib/store';
 
 export default function SettingsPage() {
   const [technicians, setTechnicians] = useState<string[]>([]);
@@ -9,43 +10,42 @@ export default function SettingsPage() {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    fetch('/api/technicians')
-      .then((r) => r.json())
-      .then((data) => { if (Array.isArray(data)) setTechnicians(data); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const data = await getTechnicians();
+        if (!cancelled) setTechnicians(data);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function addTech() {
     if (!newName.trim()) return;
     setMessage('');
-    const res = await fetch('/api/technicians', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newName.trim() }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      setTechnicians(data.technicians);
-      setNewName('');
-      setMessage(`Added ${newName.trim()}`);
-    } else {
-      setMessage(data.error || 'Failed to add');
+    const trimmed = newName.trim();
+    if (technicians.includes(trimmed)) {
+      setMessage('Technician already exists');
+      return;
     }
+
+    const updated = await saveTechnicians([...technicians, trimmed]);
+    setTechnicians(updated);
+    setNewName('');
+    setMessage(`Added ${trimmed}`);
   }
 
   async function removeTech(name: string) {
     setMessage('');
-    const res = await fetch('/api/technicians', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      setTechnicians(data.technicians);
-      setMessage(`Removed ${name}`);
-    }
+    const updated = await saveTechnicians(technicians.filter((tech) => tech !== name));
+    setTechnicians(updated);
+    setMessage(`Removed ${name}`);
   }
 
   return (
