@@ -42,3 +42,4 @@ data/jobs.json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.worktrees/
