@@ -41,4 +41,5 @@ export interface ParsedScheduleRow {
   state: string;
   woNumber?: string;
   workizJobId?: string;
+  price?: number;
 }

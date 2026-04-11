@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Starbucks Work Order Generator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0f1a; color: #e5e7eb; min-height: 100vh; }
+  .header { background: linear-gradient(135deg, #0a0f1a 0%, #0d2137 50%, rgba(0,164,199,0.3) 100%); padding: 24px 32px; display: flex; align-items: center; gap: 16px; }
+  .logo { background: white; color: #00A4C7; font-family: Georgia, serif; font-weight: bold; padding: 8px 12px; border-radius: 8px; font-size: 18px; }
+  .header h1 { color: white; font-size: 20px; }
+  .header p { color: #00A4C7; font-size: 13px; }
+  .container { max-width: 700px; margin: 0 auto; padding: 24px 16px; }
+  .card { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 24px; margin-bottom: 16px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .row.full { grid-template-columns: 1fr; }
+  label { display: block; font-size: 11px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  input, select { width: 100%; background: #0a0f1a; border: 1px solid #374151; border-radius: 8px; padding: 12px 14px; font-size: 14px; color: #e5e7eb; outline: none; }
+  input:focus { border-color: #00A4C7; }
+  .btn { width: 100%; padding: 14px; background: #00A4C7; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; }
+  .btn:hover { background: #0090b0; }
+  .btn:active { transform: scale(0.98); }
+  @media (max-width: 500px) { .row { grid-template-columns: 1fr; } .container { padding: 16px 12px; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">RS</div>
+  <div>
+    <h1>Work Order Generator</h1>
+    <p>Fill in → Generate PDF → Done</p>
+  </div>
+</div>
+
+<div class="container">
+  <div class="card">
+    <div class="row">
+      <div><label>Store #</label><input id="storeNumber" placeholder="00806"></div>
+      <div><label>WO #</label><input id="woNumber" placeholder="1963606"></div>
+    </div>
+    <div class="row full">
+      <div><label>Store Address</label><input id="address" placeholder="301 Greenwich Ave"></div>
+    </div>
+    <div class="row">
+      <div><label>City, State Zip</label><input id="cityStateZip" placeholder="Greenwich, CT 06830"></div>
+      <div><label>Store Phone</label><input id="storePhone" placeholder="(203) 661-3042"></div>
+    </div>
+    <div class="row">
+      <div><label>Service Date</label><input id="serviceDate" type="date"></div>
+      <div><label>Technician</label><input id="technician" placeholder="Tech name or company"></div>
+    </div>
+    <div class="row">
+      <div><label>Start Time</label><input id="startTime" type="time" value="22:00"></div>
+      <div><label>Stop Time</label><input id="stopTime" type="time" value="03:30"></div>
+    </div>
+  </div>
+
+  <button class="btn" onclick="generateWO()">Generate Work Order PDF</button>
+</div>
+
+<script>
+// Dynamic cursive signature is generated from the technician's name
+
+function drawCursiveSignature(doc, name, x, y, maxWidth) {
+  if (!name) return;
+
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 800;
+    canvas.height = 150;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#1a1a2e';
+    // Use Dancing Script (loaded from Google Fonts) with fallbacks
+    ctx.font = '700 58px "Dancing Script", "Brush Script MT", "Segoe Script", cursive';
+    ctx.textBaseline = 'middle';
+
+    const measured = ctx.measureText(name);
+    const textWidth = measured.width;
+    const scale = textWidth > 700 ? 700 / textWidth : 1;
+
+    ctx.save();
+    ctx.scale(scale, 1);
+    ctx.fillText(name, 10 / scale, 75);
+    ctx.restore();
+
+    const imgData = canvas.toDataURL('image/png');
+    const sigHeight = (maxWidth / canvas.width) * canvas.height;
+    doc.addImage(imgData, 'PNG', x, y - sigHeight + 8, maxWidth, sigHeight);
+  } catch (e) {
+    // Fallback: just write the name in italic
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(12);
+    doc.setTextColor('#1a1a2e');
+    doc.text(name, x, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor('#000000');
+  }
+}
+
+function generateWO() {
+  try {
+  const jsPDF = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+  if (!jsPDF) { alert('PDF library not loaded. Check your internet connection and refresh.'); return; }
+  const doc = new jsPDF('p', 'pt', 'letter');
+  const W = doc.internal.pageSize.getWidth();
+  const M = 36;
+  const R = W - M;
+
+  const store = document.getElementById('storeNumber').value || '';
+  const wo = document.getElementById('woNumber').value || '';
+  const addr = document.getElementById('address').value || '';
+  const csz = document.getElementById('cityStateZip').value || '';
+  const phone = document.getElementById('storePhone').value || '';
+  const dateVal = document.getElementById('serviceDate').value || '';
+  const tech = document.getElementById('technician').value || 'Rolling Suds of Westchester-Stamford';
+  const start = document.getElementById('startTime').value || '';
+  const stop = document.getElementById('stopTime').value || '';
+
+  const cszParts = csz.split(',').map(s => s.trim());
+  const city = cszParts[0] || '';
+  const stateZip = (cszParts[1] || '').trim();
+
+  let y = 36;
+
+  // Header left
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+  doc.text('SUPERCLEAN SERVICE COMPANY, INC', M, y); y += 12;
+  doc.setFont('helvetica', 'italic'); doc.setFontSize(8);
+  doc.text('Super Service, Super Reliable, Super Clean', M, y); y += 14;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+  doc.text('PO Box 551802', M, y); y += 10;
+  doc.text('Dallas, TX 75355', M, y); y += 10;
+  doc.text('P: 888-337-8737', M, y); y += 10;
+  doc.text('Fax: 972-926-9733', M, y);
+
+  // Header right
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+  doc.text('WO # ' + wo, R, 38, { align: 'right' });
+  const rc = W * 0.48;
+  doc.setFontSize(9);
+  let ry = 56;
+  doc.text('SERVICE: Pressure Wash Patio/Sidewalk/Drive Thru', rc, ry); ry += 13;
+  doc.text('Starbucks # ' + store, rc, ry); ry += 11;
+  doc.setFont('helvetica', 'normal');
+  doc.text(addr, rc, ry); ry += 11;
+  doc.text(city + ', ' + stateZip, rc, ry); ry += 11;
+  if (phone) doc.text(phone, rc, ry);
+
+  y += 20;
+
+  // Service date table
+  const c1 = (W - M*2) * 0.35, c2 = (W - M*2) * 0.38, c3 = (W - M*2) * 0.27;
+  doc.setFillColor('#333333');
+  doc.rect(M, y, c1, 14, 'FD'); doc.rect(M+c1, y, c2, 14, 'FD'); doc.rect(M+c1+c2, y, c3, 14, 'FD');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor('#FFFFFF');
+  doc.text('SERVICE DATE', M+4, y+10);
+  doc.text('AUTHORIZED STARBUCKS WORKTASK#', M+c1+4, y+10);
+  doc.text('IVR INSTRUCTIONS', M+c1+c2+4, y+10);
+
+  doc.setTextColor('#000000');
+  const dy = y + 14;
+  doc.setDrawColor('#000000'); doc.setLineWidth(0.75);
+  doc.rect(M, dy, c1, 18, 'S'); doc.rect(M+c1, dy, c2, 18, 'S'); doc.rect(M+c1+c2, dy, c3, 18, 'S');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+  doc.text(formatDateFull(dateVal), M+4, dy+12);
+  doc.setFont('helvetica', 'normal');
+  doc.text(wo, M+c1+4, dy+12);
+  doc.text('No IVR needed', M+c1+c2+4, dy+12);
+
+  y = dy + 18 + 12;
+
+  // Service line
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+  doc.text('Pressure Wash Patio/Sidewalk/Drive Thru', M, y);
+  doc.text('COMPLETE_____X_____', R-140, y);
+  y += 16;
+
+  // Instructions box
+  const instrTop = y;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+  const instrText = 'Crew to perform pressure wash of patio, sidewalks around all sides and rear of building, back door pad, and drive-thru for Starbucks\'s restaurants. Service window starts 1 hour after closing, finishes 2 hours before opening. Most stores are open 5AM-9PM on weekdays and close at 10PM/11PM on weekends. Store may not have an operational outside water spigot. Crew must be prepared to provide water via a water tank. Crews must ensure compliance with all jurisdictional requirements. Chemicals used must be "Green" and not harmful. All personnel must wear appropriate PPE, including gloves, safety goggles, ear protection, and non-slip footwear. Drive thru cleaned 30\' before drive to 10\' after the service window. Pictures are required for payment with a 5 photo minimum, 2 before & after pictures, 1 picture of the front door area with address on it. Report back to Account Manager if there are any safety/security issues noted during services.';
+  const instrLines = doc.splitTextToSize(instrText, W - M*2 - 8);
+  doc.text(instrLines, M+4, y+10);
+  const instrH = instrLines.length * 8 + 16;
+  doc.setDrawColor('#000000'); doc.setLineWidth(0.5);
+  doc.rect(M, instrTop-4, W-M*2, instrH, 'S');
+  y = instrTop + instrH + 16;
+
+  // Photo warning
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+  const pc2 = W/2 + 10;
+  doc.text('IMPORTANT! 5 PHOTOS ARE REQUIRED FOR PAYMENT', M, y);
+  doc.text('OF SERVICES ! TWO AREAS  OF PHOTOS', pc2, y); y += 12;
+  doc.text('THAT HAVE BEFORE AND AFTER  TAKEN AND 1 PHOTO', M, y);
+  doc.text('TAKEN OF FRONT DOOR WITH ADDRESS', pc2, y); y += 18;
+
+  doc.setLineWidth(0.5); doc.line(M, y, R, y); y += 14;
+
+  // Checklist
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+  doc.text('Technician Completion Checklist', M, y); y += 12;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+  doc.text('Complete all applicable items below.', M, y); y += 16;
+
+  const items = [
+    'Remember, respectful conduct is a MUST!',
+    'Bring WO and Photo ID to service.',
+    'Pre treat all heavy stains using "Green" chemicals',
+    'Remove tables and chairs & replace after service',
+    'Sidewalks, patio, and backdoor pad power washed',
+    'Take before and after photos (5 minimum required)',
+    'Make sure  wastewater properly disposed of',
+    'Wipe down windows of any over spray',
+    'Photos sent to   Starbucks@gosuperclean.com',
+  ];
+  items.forEach(item => { doc.text('_X_', M, y); doc.text(item, M+22, y); y += 12; });
+  y += 12;
+
+  // Completion fields
+  const flx = M + 95, flw = 200;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+
+  doc.text('Date Completed:', M, y);
+  doc.line(flx, y+1, flx+flw, y+1);
+  if (dateVal) doc.text(formatDateShort(dateVal), flx+4, y); y += 14;
+
+  doc.text('Technician:', M, y);
+  doc.line(flx, y+1, flx+flw, y+1);
+  doc.text(tech, flx+4, y); y += 14;
+
+  doc.text('Start Time:', M, y);
+  doc.line(flx, y+1, flx+flw, y+1);
+  if (start) doc.text(formatTime(start), flx+4, y); y += 14;
+
+  doc.text('Stop Time:', M, y);
+  doc.line(flx, y+1, flx+flw, y+1);
+  if (stop) doc.text(formatTime(stop), flx+4, y); y += 14;
+
+  doc.text('Total Hours:', M, y);
+  doc.line(flx, y+1, flx+flw, y+1);
+  if (start && stop) doc.text(calcHours(start, stop), flx+4, y); y += 22;
+
+  // Signature
+  doc.text('Tech Signature:', M, y);
+  doc.line(flx, y+1, flx+flw, y+1);
+
+  // Draw cursive signature from tech name
+  drawCursiveSignature(doc, tech, flx+8, y-2, 160);
+
+  y += 30;
+  doc.setLineWidth(0.5); doc.line(M, y, R, y); y += 14;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+  doc.text('Technician:', M, y); y += 14;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+  doc.text('Fax this signed work order to Superclean no more than 24 hours after service completion to avoid penalty', M, y); y += 10;
+  doc.text('Work orders received more than 30 days after service will not be considered valid', M, y);
+
+  doc.save('WO_SB' + store + '_' + wo + '.pdf');
+  } catch (err) {
+    alert('Error generating PDF: ' + err.message);
+    console.error(err);
+  }
+}
+
+function formatDateFull(d) {
+  if (!d) return '';
+  const dt = new Date(d + 'T00:00:00');
+  const days = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+  return days[dt.getDay()] + ' ' + (dt.getMonth()+1) + '/' + dt.getDate() + '/' + dt.getFullYear() + ' 12:00 AM';
+}
+
+function formatDateShort(d) {
+  if (!d) return '';
+  const dt = new Date(d + 'T00:00:00');
+  return (dt.getMonth()+1).toString().padStart(2,'0') + '/' + dt.getDate().toString().padStart(2,'0') + '/' + dt.getFullYear();
+}
+
+function formatTime(t) {
+  if (!t) return '';
+  const [h,m] = t.split(':').map(Number);
+  return (h%12||12) + ':' + m.toString().padStart(2,'0') + (h>=12?' PM':' AM');
+}
+
+function calcHours(s, e) {
+  const [sh,sm] = s.split(':').map(Number);
+  const [eh,em] = e.split(':').map(Number);
+  let sm2 = sh*60+sm, em2 = eh*60+em;
+  if (em2 < sm2) em2 += 1440;
+  const d = em2 - sm2;
+  return Math.floor(d/60) + 'h ' + (d%60) + 'm';
+}
+
+// Set today's date as default
+document.getElementById('serviceDate').value = new Date().toISOString().split('T')[0];
+</script>
+</body>
+</html>

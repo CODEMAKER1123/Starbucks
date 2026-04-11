@@ -10,6 +10,7 @@ import { Job, ParsedScheduleRow } from '@/lib/types';
 export default function UploadPage() {
   const technicians = useTechnicians();
   const [rows, setRows] = useState<ParsedScheduleRow[]>([]);
+  const [prices, setPrices] = useState<Record<number, number>>({});
   const [techs, setTechs] = useState<Record<number, string>>({});
   const [defaultTech, setDefaultTech] = useState('');
   const [pushing, setPushing] = useState(false);
@@ -30,11 +31,16 @@ export default function UploadPage() {
     const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
 
     const parsed: ParsedScheduleRow[] = jsonData.map((row) => {
-      const store = String(row['Store'] || row['store'] || '');
+      const store = String(row['Store'] || row['store'] || row['Store #'] || row['store #'] || '');
       const storeMatch = store.match(/#?\s*(\d+)/);
       const storeNumber = storeMatch ? storeMatch[1].padStart(5, '0') : store;
       const woRaw = row['WO Number'] || row['WO number'] || row['woNumber'] || row['WO#'] || row['WO #'] || '';
       const workizRaw = row['Workiz Job ID'] || row['workizJobId'] || row['WorkizJobId'] || row['Job ID'] || '';
+
+      // Parse price from various possible column names
+      const rawPrice = row['Price'] || row['price'] || row['Amount'] || row['amount']
+        || row['Cost'] || row['cost'] || row['Rate'] || row['rate'] || '';
+      const parsedPrice = Number(rawPrice);
 
       return {
         night: Number(row['Night'] || row['night'] || 0),
@@ -46,12 +52,21 @@ export default function UploadPage() {
         state: String(row['State'] || row['state'] || ''),
         woNumber: woRaw ? String(woRaw).trim() : undefined,
         workizJobId: workizRaw ? String(workizRaw).trim() : undefined,
+        price: parsedPrice > 0 ? parsedPrice : undefined,
       };
     });
 
     setRows(parsed);
+    // Pre-populate prices from spreadsheet if available
+    const initialPrices: Record<number, number> = {};
+    parsed.forEach((row, i) => {
+      if (row.price) initialPrices[i] = row.price;
+    });
+    if (Object.keys(initialPrices).length > 0) setPrices(initialPrices);
     setMessage(`Parsed ${parsed.length} jobs from ${file.name}`);
   }, []);
+
+  const [savedJobIds, setSavedJobIds] = useState<string[]>([]);
 
   async function saveLocally() {
     const jobs: Job[] = rows.map((row, i) => ({
@@ -62,9 +77,9 @@ export default function UploadPage() {
       address: row.address,
       city: row.city,
       state: row.state,
-      price: DEFAULT_PRICE,
-      salesTax: DEFAULT_SALES_TAX,
-      totalPrice: DEFAULT_TOTAL_PRICE,
+      price: prices[i] ?? row.price ?? DEFAULT_PRICE,
+      salesTax: Number((((prices[i] ?? row.price ?? DEFAULT_PRICE) * 0.06)).toFixed(2)),
+      totalPrice: Number((((prices[i] ?? row.price ?? DEFAULT_PRICE) * 1.06)).toFixed(2)),
       serviceDate: row.date,
       nightNumber: row.night,
       assignedTech: techs[i] || defaultTech || undefined,
@@ -74,6 +89,7 @@ export default function UploadPage() {
     }));
 
     await addJobs(jobs);
+    setSavedJobIds(jobs.map((j) => j.id));
     setMessage(`Saved ${jobs.length} jobs to the shared schedule. Redirecting to schedule...`);
     setTimeout(() => { window.location.href = '/schedule'; }, 1500);
   }
@@ -92,18 +108,28 @@ export default function UploadPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            clientFirstName: `Starbucks #${row.storeNumber}`,
-            jobAddress: row.address,
-            jobCity: row.city,
-            jobState: row.state,
-            jobDescription: `Pressure Wash Patio/Sidewalk/Drive Thru - Starbucks #${row.storeNumber}`,
-            jobDateTime: row.date,
-            jobType: 'Commercial',
+            FirstName: `Starbucks #${row.storeNumber}`,
+            Address: row.address,
+            City: row.city,
+            State: row.state,
+            Country: 'US',
+            JobDescription: `Pressure Wash Patio/Sidewalk/Drive Thru - Starbucks #${row.storeNumber}`,
+            JobDateTime: row.date + ' 22:00',
+            JobType: 'Commercial',
           }),
         });
         const data = await res.json();
         if (res.ok && !data.error) {
           succeeded++;
+          // Save Workiz UUID back to local job if we have one
+          const workizUuid = data?.data?.UUID || data?.UUID || data?.uuid;
+          if (workizUuid && savedJobIds[i]) {
+            fetch(`/api/jobs/${savedJobIds[i]}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ workizJobId: workizUuid }),
+            }).catch(() => {});
+          }
         } else {
           failed++;
           errors.push(`#${row.storeNumber}: ${data.error || `HTTP ${res.status}`}`);

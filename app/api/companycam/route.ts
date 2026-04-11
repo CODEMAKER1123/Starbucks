@@ -65,10 +65,12 @@ export async function GET(req: NextRequest) {
     }
 
     if (storeNumber) {
-      const project = await findStarbucksProject(storeNumber, woNumber || undefined);
+      const address = req.nextUrl.searchParams.get('address');
+      const project = await findStarbucksProject(storeNumber, woNumber || undefined, address || undefined);
 
       if (!project) {
-        const fallbackResults = await searchProjects(`Starbucks #${storeNumber}`);
+        const fallbackQuery = address || `Starbucks #${storeNumber}`;
+        const fallbackResults = await searchProjects(fallbackQuery);
         return NextResponse.json({
           success: true,
           configured: true,

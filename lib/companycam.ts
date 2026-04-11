@@ -117,7 +117,8 @@ export async function searchProjects(query: string): Promise<CCProject[]> {
 
 export async function findStarbucksProject(
   storeNumber: string,
-  woNumber?: string
+  woNumber?: string,
+  address?: string
 ): Promise<CCProject | null> {
   if (woNumber) {
     const exactQuery = `Starbucks #${storeNumber} WO# ${woNumber}`;
@@ -130,15 +131,28 @@ export async function findStarbucksProject(
   const storeResults = await searchProjects(storeQuery);
   const matches = storeResults.filter((p) => p.name.includes(`#${storeNumber}`));
 
-  if (matches.length === 0) return null;
+  if (matches.length > 0) {
+    if (woNumber) {
+      const woMatch = matches.find((p) => p.name.includes(woNumber));
+      if (woMatch) return woMatch;
+    }
 
-  if (woNumber) {
-    const woMatch = matches.find((p) => p.name.includes(woNumber));
-    if (woMatch) return woMatch;
+    matches.sort((a, b) => b.updated_at - a.updated_at);
+    return matches[0];
   }
 
-  matches.sort((a, b) => b.updated_at - a.updated_at);
-  return matches[0];
+  if (address) {
+    const addrResults = await searchProjects(address);
+    if (addrResults.length > 0) {
+      const starbucksMatch = addrResults.find((p) =>
+        p.name.toLowerCase().includes('starbucks') || p.name.includes(storeNumber)
+      );
+      if (starbucksMatch) return starbucksMatch;
+      return addrResults[0];
+    }
+  }
+
+  return null;
 }
 
 export async function getProjectPhotos(projectId: string, perPage = 50): Promise<CCPhoto[]> {
