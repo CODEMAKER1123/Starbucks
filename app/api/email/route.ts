@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import sharp from 'sharp';
 import { sendEmail, getEmailStatus } from '@/lib/email';
 import { downloadPhotoAsBase64 } from '@/lib/companycam';
 import { generateInvoicePDF } from '@/lib/pdf/invoice';
@@ -48,6 +49,31 @@ async function logEmailToJob(jobId: string | undefined, log: EmailLog) {
   }
 }
 
+async function compressPhoto(photoUrl: string, index: number, storeNumber: string): Promise<{ name: string; contentType: string; base64: string }> {
+  const { base64, contentType } = await downloadPhotoAsBase64(photoUrl);
+  const inputBuffer = Buffer.from(base64, 'base64');
+
+  if (contentType.includes('svg')) {
+    return {
+      name: `SB${storeNumber}_photo_${index + 1}.svg`,
+      contentType,
+      base64,
+    };
+  }
+
+  const outputBuffer = await sharp(inputBuffer)
+    .rotate()
+    .resize({ width: 1600, withoutEnlargement: true })
+    .jpeg({ quality: 78, mozjpeg: true })
+    .toBuffer();
+
+  return {
+    name: `SB${storeNumber}_photo_${index + 1}.jpg`,
+    contentType: 'image/jpeg',
+    base64: outputBuffer.toString('base64'),
+  };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const emailStatus = getEmailStatus();
@@ -59,7 +85,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body: SendRequest = await req.json();
-    const testRecipient = process.env.EMAIL_REPLY_TO || process.env.NEXT_PUBLIC_COMPANY_EMAIL || 'operator@example.local';
+    const testRecipient = 'matt.rathbun@rollingsuds.com';
 
     if (body.type === 'documents') {
       if (!body.invoiceData || !body.workOrderData) {
@@ -67,6 +93,7 @@ export async function POST(req: NextRequest) {
       }
 
       const to = body.test ? testRecipient : 'documents@gosuperclean.com';
+      const cc = body.test ? undefined : 'matt.rathbun@rollingsuds.com';
       const subject = `${body.test ? '[TEST] ' : ''}Starbucks #${body.storeNumber} WO# ${body.woNumber} Invoice`;
 
       const invPdf = generateInvoicePDF({
@@ -87,6 +114,7 @@ export async function POST(req: NextRequest) {
         to,
         subject,
         body: `<p>Attached is the invoice and signed WO for Starbucks #${body.storeNumber} WO# ${body.woNumber}. Let me know if you have any questions. Thanks.</p>`,
+        cc,
         attachments: [
           {
             name: `Invoice_SB${body.storeNumber}_WO${body.woNumber}.pdf`,
@@ -124,23 +152,19 @@ export async function POST(req: NextRequest) {
       }
 
       const to = body.test ? testRecipient : 'starbucks@gosuperclean.com';
+      const cc = body.test ? undefined : 'matt.rathbun@rollingsuds.com';
       const subject = `${body.test ? '[TEST] ' : ''}Starbucks #${body.storeNumber} WO# ${body.woNumber} Pictures`;
 
       const attachments = [];
       for (let i = 0; i < body.photoUrls.length; i++) {
-        const { base64, contentType } = await downloadPhotoAsBase64(body.photoUrls[i]);
-        const ext = contentType.includes('png') ? 'png' : contentType.includes('svg') ? 'svg' : 'jpg';
-        attachments.push({
-          name: `SB${body.storeNumber}_photo_${i + 1}.${ext}`,
-          contentType,
-          base64,
-        });
+        attachments.push(await compressPhoto(body.photoUrls[i], i, body.storeNumber));
       }
 
       const result = await sendEmail({
         to,
         subject,
         body: `<p>Attached are the before/after pictures and front door photo for Starbucks #${body.storeNumber} WO# ${body.woNumber}. Let me know if you have any questions. Thanks.</p>`,
+        cc,
         attachments,
       });
 

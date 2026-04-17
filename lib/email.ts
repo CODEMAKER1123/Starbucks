@@ -18,6 +18,7 @@ interface EmailOptions {
   to: string;
   subject: string;
   body: string;
+  cc?: string;
   attachments: Attachment[];
 }
 
@@ -48,7 +49,7 @@ function persistMockEmail(options: EmailOptions) {
     mode: 'mock',
     from: `${EMAIL_SENDER_NAME} <${EMAIL_FROM}>`,
     replyTo: EMAIL_REPLY_TO || null,
-    cc: EMAIL_CC ? [EMAIL_CC] : [],
+    cc: options.cc ? [options.cc] : EMAIL_CC ? [EMAIL_CC] : [],
     to: options.to,
     subject: options.subject,
     html: options.body,
@@ -92,7 +93,7 @@ export async function sendEmail(options: EmailOptions): Promise<{ mode: 'live' |
     from: `${EMAIL_SENDER_NAME} <${EMAIL_FROM}>`,
     replyTo: EMAIL_REPLY_TO || undefined,
     to: [options.to],
-    cc: EMAIL_CC ? [EMAIL_CC] : undefined,
+    cc: options.cc ? [options.cc] : EMAIL_CC ? [EMAIL_CC] : undefined,
     subject: options.subject,
     html: options.body,
     attachments: options.attachments.map((att) => ({
